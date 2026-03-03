@@ -233,7 +233,7 @@ function normalizeDtag(text: string): string {
 
 /**
  * Processes wikilinks: [[target]] or [[target|display text]]
- * Converts to wikilink:dtag[display] format
+ * Converts to WIKILINK: placeholder format to protect from AsciiDoc processing
  */
 function processWikilinks(content: string, linkBaseURL: string): string {
   // Process bookstr macro wikilinks: [[book::...]]
@@ -243,12 +243,15 @@ function processWikilinks(content: string, linkBaseURL: string): string {
   });
 
   // Process standard wikilinks: [[Target Page]] or [[target page|see this]]
+  // Use placeholder format to prevent AsciiDoc from processing the brackets
   content = content.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_match, target, displayText) => {
     const cleanTarget = target.trim();
     const cleanDisplay = displayText ? displayText.trim() : cleanTarget;
     const dTag = normalizeDtag(cleanTarget);
     
-    return `wikilink:${dTag}[${cleanDisplay}]`;
+    // Use placeholder format: WIKILINK:dtag|display
+    // This prevents AsciiDoc from interpreting the brackets
+    return `WIKILINK:${dTag}|${cleanDisplay}`;
   });
 
   return content;

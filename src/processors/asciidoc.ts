@@ -92,6 +92,7 @@ export async function processAsciidoc(
     // Post-process HTML: convert macros to HTML, add styling, etc.
     const processed = postProcessHtml(sanitized, {
       enableMusicalNotation,
+      linkBaseURL: options.linkBaseURL,
     });
     
     // Process links: add target="_blank" to external links
@@ -103,6 +104,7 @@ export async function processAsciidoc(
     const tocSanitized = sanitizeHTML(toc);
     const tocProcessed = postProcessHtml(tocSanitized, {
       enableMusicalNotation: false, // Don't process music in TOC
+      linkBaseURL: options.linkBaseURL,
     });
     
     // Process links in TOC as well
