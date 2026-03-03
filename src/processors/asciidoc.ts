@@ -1,6 +1,6 @@
 import asciidoctor from '@asciidoctor/core';
 import { ProcessResult } from '../types';
-import { extractTOC, sanitizeHTML } from './html-utils';
+import { extractTOC, sanitizeHTML, processLinks } from './html-utils';
 import { postProcessHtml } from './html-postprocess';
 
 const asciidoctorInstance = asciidoctor();
@@ -10,6 +10,7 @@ export interface ProcessOptions {
   enableLaTeX?: boolean;
   enableMusicalNotation?: boolean;
   originalContent?: string; // Original content for LaTeX detection
+  linkBaseURL?: string; // Base URL for link processing
 }
 
 /**
@@ -93,11 +94,21 @@ export async function processAsciidoc(
       enableMusicalNotation,
     });
     
+    // Process links: add target="_blank" to external links
+    const processedWithLinks = options.linkBaseURL 
+      ? processLinks(processed, options.linkBaseURL)
+      : processed;
+    
     // Also process TOC
     const tocSanitized = sanitizeHTML(toc);
     const tocProcessed = postProcessHtml(tocSanitized, {
       enableMusicalNotation: false, // Don't process music in TOC
     });
+    
+    // Process links in TOC as well
+    const tocProcessedWithLinks = options.linkBaseURL
+      ? processLinks(tocProcessed, options.linkBaseURL)
+      : tocProcessed;
 
     // Check for LaTeX in original content (more reliable than checking HTML)
     const contentToCheck = options.originalContent || content;
@@ -109,8 +120,8 @@ export async function processAsciidoc(
     );
 
     return {
-      content: processed,
-      tableOfContents: tocProcessed,
+      content: processedWithLinks,
+      tableOfContents: tocProcessedWithLinks,
       hasLaTeX,
       hasMusicalNotation,
       nostrLinks: [], // Will be populated by metadata extraction
@@ -123,8 +134,10 @@ export async function processAsciidoc(
     // Fallback to plain text with error logging
     const errorMessage = error instanceof Error ? error.message : String(error);
     // Use process.stderr.write for Node.js compatibility instead of console.error
-    if (typeof process !== 'undefined' && process.stderr) {
-      process.stderr.write(`Error processing AsciiDoc: ${errorMessage}\n`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodeProcess = (globalThis as any).process;
+    if (nodeProcess?.stderr) {
+      nodeProcess.stderr.write(`Error processing AsciiDoc: ${errorMessage}\n`);
     }
     
     // Escape HTML in content for safe display

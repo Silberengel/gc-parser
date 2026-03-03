@@ -72,6 +72,7 @@ export class Parser {
         enableLaTeX: this.options.enableLaTeX,
         enableMusicalNotation: this.options.enableMusicalNotation,
         originalContent: content, // Pass original for LaTeX detection
+        linkBaseURL: this.options.linkBaseURL, // Pass linkBaseURL for link processing
       }
     );
 
