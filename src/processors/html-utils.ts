@@ -1,0 +1,170 @@
+/**
+ * Extracts the table of contents from AsciiDoc HTML output
+ * Returns the TOC HTML and the content HTML without the TOC
+ */
+export function extractTOC(html: string): { toc: string; contentWithoutTOC: string } {
+  // AsciiDoc with toc: 'left' generates a TOC in a div with id="toc" or class="toc"
+  let tocContent = '';
+  let contentWithoutTOC = html;
+
+  // Find the start of the TOC div - try multiple patterns
+  const tocStartPatterns = [
+    /<div\s+id=["']toc["']\s+class=["']toc["'][^>]*>/i,
+    /<div\s+id=["']toc["'][^>]*>/i,
+    /<div\s+class=["']toc["'][^>]*>/i,
+    /<nav\s+id=["']toc["'][^>]*>/i,
+  ];
+
+  let tocStartIdx = -1;
+  let tocStartTag = '';
+
+  for (const pattern of tocStartPatterns) {
+    const match = html.match(pattern);
+    if (match && match.index !== undefined) {
+      tocStartIdx = match.index;
+      tocStartTag = match[0];
+      break;
+    }
+  }
+
+  if (tocStartIdx === -1) {
+    // No TOC found
+    return { toc: '', contentWithoutTOC: html };
+  }
+
+  // Find the matching closing tag by counting div tags
+  const searchStart = tocStartIdx + tocStartTag.length;
+  let depth = 1;
+  let i = searchStart;
+
+  while (i < html.length && depth > 0) {
+    // Look for opening or closing div/nav tags
+    if (i + 4 < html.length && html.substring(i, i + 4) === '<div') {
+      // Check if it's a closing tag
+      if (i + 5 < html.length && html[i + 4] === '/') {
+        depth--;
+        const closeIdx = html.indexOf('>', i);
+        if (closeIdx === -1) break;
+        i = closeIdx + 1;
+      } else {
+        // Opening tag - find the end
+        const closeIdx = html.indexOf('>', i);
+        if (closeIdx === -1) break;
+        // Check if it's self-closing
+        if (html[closeIdx - 1] !== '/') {
+          depth++;
+        }
+        i = closeIdx + 1;
+      }
+    } else if (i + 5 < html.length && html.substring(i, i + 5) === '</div') {
+      depth--;
+      const closeIdx = html.indexOf('>', i);
+      if (closeIdx === -1) break;
+      i = closeIdx + 1;
+    } else if (i + 5 < html.length && html.substring(i, i + 5) === '</nav') {
+      depth--;
+      const closeIdx = html.indexOf('>', i);
+      if (closeIdx === -1) break;
+      i = closeIdx + 1;
+    } else {
+      i++;
+    }
+  }
+
+  if (depth === 0) {
+    // Found the matching closing tag
+    const tocEndIdx = i;
+    // Extract the TOC content (inner HTML)
+    const tocFullHTML = html.substring(tocStartIdx, tocEndIdx);
+    // Extract just the inner content (without the outer div tags)
+    let innerStart = tocStartTag.length;
+    let innerEnd = tocFullHTML.length;
+    // Find the last </div> or </nav>
+    if (tocFullHTML.endsWith('</div>')) {
+      innerEnd -= 6;
+    } else if (tocFullHTML.endsWith('</nav>')) {
+      innerEnd -= 7;
+    }
+    tocContent = tocFullHTML.substring(innerStart, innerEnd).trim();
+
+    // Remove the toctitle div if present (AsciiDoc adds "Table of Contents" title)
+    tocContent = tocContent.replace(/<div\s+id=["']toctitle["'][^>]*>.*?<\/div>\s*/gis, '');
+    tocContent = tocContent.trim();
+
+    // Remove the TOC from the content
+    contentWithoutTOC = html.substring(0, tocStartIdx) + html.substring(tocEndIdx);
+  }
+
+  return { toc: tocContent, contentWithoutTOC };
+}
+
+/**
+ * Performs basic HTML sanitization to prevent XSS
+ */
+export function sanitizeHTML(html: string): string {
+  // Remove script tags and their content
+  html = html.replace(/<script[^>]*>.*?<\/script>/gis, '');
+
+  // Remove event handlers (onclick, onerror, etc.)
+  html = html.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+
+  // Remove javascript: protocol in links
+  html = html.replace(/javascript:/gi, '');
+
+  // Remove data: URLs that could be dangerous
+  html = html.replace(/data:\s*text\/html/gi, '');
+
+  return html;
+}
+
+/**
+ * Processes HTML links to add target="_blank" to external links
+ */
+export function processLinks(html: string, linkBaseURL: string): string {
+  // Extract domain from linkBaseURL for comparison
+  let linkBaseDomain = '';
+  if (linkBaseURL) {
+    const url = linkBaseURL.replace(/^https?:\/\//, '');
+    const parts = url.split('/');
+    if (parts.length > 0) {
+      linkBaseDomain = parts[0];
+    }
+  }
+
+  // Regex to match <a> tags with href attributes
+  const linkRegex = /<a\s+([^>]*?)href\s*=\s*["']([^"']+)["']([^>]*?)>/g;
+
+  return html.replace(linkRegex, (match, before, href, after) => {
+    // Check if it's an external link (starts with http:// or https://)
+    const isExternal = href.startsWith('http://') || href.startsWith('https://');
+
+    if (isExternal) {
+      // Check if it's pointing to our own domain
+      if (linkBaseDomain && href.includes(linkBaseDomain)) {
+        // Same domain - open in same tab (remove any existing target attribute)
+        return match.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+      }
+
+      // External link - add target="_blank" and rel="noopener noreferrer" if not already present
+      if (!match.includes('target=')) {
+        if (!match.includes('rel=')) {
+          return match.replace('>', ' target="_blank" rel="noopener noreferrer">');
+        } else {
+          // Update existing rel attribute to include noopener if not present
+          const updatedMatch = match.replace(/rel\s*=\s*["']([^"']*)["']/gi, (relMatch, relValue) => {
+            if (!relValue.includes('noopener')) {
+              return `rel="${relValue} noopener noreferrer"`;
+            }
+            return relMatch;
+          });
+          return updatedMatch.replace('>', ' target="_blank">');
+        }
+      }
+    } else {
+      // Local/relative link - ensure it opens in same tab (remove target if present)
+      return match.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+    }
+
+    return match;
+  });
+}
