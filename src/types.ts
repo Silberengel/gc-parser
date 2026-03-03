@@ -68,5 +68,6 @@ export enum ContentFormat {
   Unknown = 'unknown',
   AsciiDoc = 'asciidoc',
   Markdown = 'markdown',
+  Wikipedia = 'wikipedia',
   Plain = 'plain'
 }

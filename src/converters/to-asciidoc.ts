@@ -27,6 +27,10 @@ export function convertToAsciidoc(
       });
       break;
 
+    case ContentFormat.Wikipedia:
+      asciidoc = convertWikipediaToAsciidoc(content);
+      break;
+
     case ContentFormat.Markdown:
       asciidoc = convertMarkdownToAsciidoc(content);
       break;
@@ -49,6 +53,50 @@ export function convertToAsciidoc(
   // Process hashtags
   asciidoc = processHashtags(asciidoc);
 
+  return asciidoc;
+}
+
+/**
+ * Converts Wikipedia markup to AsciiDoc format
+ * Handles Wikipedia-style headings, links, and formatting
+ */
+function convertWikipediaToAsciidoc(content: string): string {
+  let asciidoc = content.replace(/\\n/g, '\n');
+  
+  // Convert Wikipedia headings: == Heading == to AsciiDoc == Heading
+  // Wikipedia uses == for level 2, === for level 3, etc.
+  // AsciiDoc uses = for title, == for level 1, === for level 2, etc.
+  // So Wikipedia level 2 (==) maps to AsciiDoc level 1 (==)
+  asciidoc = asciidoc.replace(/^(=+)\s+(.+?)\s+\1$/gm, (match, equals, heading) => {
+    const level = equals.length - 1; // Count = signs, subtract 1 for AsciiDoc mapping
+    const asciidocEquals = '='.repeat(level + 1); // AsciiDoc uses one more = for same level
+    return `${asciidocEquals} ${heading.trim()}`;
+  });
+  
+  // Convert Wikipedia bold: ''text'' to AsciiDoc *text*
+  asciidoc = asciidoc.replace(/''([^']+)''/g, '*$1*');
+  
+  // Convert Wikipedia italic: 'text' to AsciiDoc _text_
+  // Be careful not to match apostrophes in words
+  asciidoc = asciidoc.replace(/(^|[^'])'([^']+)'([^']|$)/g, '$1_$2_$3');
+  
+  // Convert Wikipedia links: [[Page]] or [[Page|Display]] to wikilinks
+  // These will be processed by processWikilinks later, but we need to ensure
+  // they're in the right format. Wikipedia links are already in [[...]] format
+  // which matches our wikilink format, so they should work as-is.
+  
+  // Convert Wikipedia external links: [URL text] to AsciiDoc link:URL[text]
+  asciidoc = asciidoc.replace(/\[(https?:\/\/[^\s\]]+)\s+([^\]]+)\]/g, 'link:$1[$2]');
+  asciidoc = asciidoc.replace(/\[(https?:\/\/[^\s\]]+)\]/g, 'link:$1[$1]');
+  
+  // Convert Wikipedia lists (they use * or # similar to Markdown)
+  // This is handled similarly to Markdown, so we can reuse that logic
+  // But Wikipedia also uses : for definition lists and ; for term lists
+  // For now, we'll handle basic lists and let AsciiDoc handle the rest
+  
+  // Convert horizontal rules: ---- to AsciiDoc '''
+  asciidoc = asciidoc.replace(/^----+$/gm, "'''");
+  
   return asciidoc;
 }
 

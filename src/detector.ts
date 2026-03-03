@@ -27,6 +27,21 @@ export function detectFormat(content: string): ContentFormat {
     }
   }
 
+  // Check for Wikipedia markup indicators (== Heading == format)
+  const wikipediaIndicators = [
+    /^==+\s+.+?\s+==+$/m,     // Wikipedia headings: == Heading ==
+    /\[\[[^\]]+\]\]/,         // Wikipedia links: [[Page]]
+    /''[^']+''/,              // Wikipedia bold: ''text''
+    /'[^']+'/,                // Wikipedia italic: 'text'
+  ];
+
+  let wikipediaScore = 0;
+  for (const indicator of wikipediaIndicators) {
+    if (indicator.test(content)) {
+      wikipediaScore++;
+    }
+  }
+
   // Check for Markdown indicators (more specific patterns to avoid false positives)
   const markdownIndicators = [
     /^#{1,6}\s+/m,           // Heading at start of line
@@ -45,7 +60,10 @@ export function detectFormat(content: string): ContentFormat {
   }
 
   // Determine format based on scores
-  if (asciidocScore > markdownScore && asciidocScore >= 2) {
+  // Wikipedia format takes precedence if detected (it's more specific)
+  if (wikipediaScore > 0 && wikipediaScore >= 2) {
+    return ContentFormat.Wikipedia;
+  } else if (asciidocScore > markdownScore && asciidocScore >= 2) {
     return ContentFormat.AsciiDoc;
   } else if (markdownScore > 0) {
     return ContentFormat.Markdown;
