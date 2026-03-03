@@ -28,8 +28,8 @@ function extractNostrLinks(content: string): NostrLink[] {
   const nostrLinks: NostrLink[] = [];
   const seen = new Set<string>();
 
-  // Extract nostr: prefixed links
-  const nostrMatches = content.match(/nostr:([a-z0-9]+[a-z0-9]{6,})/g) || [];
+  // Extract nostr: prefixed links (valid bech32 format)
+  const nostrMatches = content.match(/nostr:((?:npub|nprofile|nevent|naddr|note)1[a-z0-9]{6,})/gi) || [];
   nostrMatches.forEach(match => {
     const id = match.substring(6); // Remove 'nostr:'
     const type = getNostrType(id);
@@ -79,20 +79,33 @@ function extractWikilinks(content: string): Wikilink[] {
 
 /**
  * Extract hashtags from content
+ * Excludes hashtags in URLs, code blocks, and inline code
  */
 function extractHashtags(content: string): string[] {
   const hashtags: string[] = [];
   const seen = new Set<string>();
 
-  // Extract hashtags: #hashtag
-  const hashtagMatches = content.match(/#([a-zA-Z0-9_]+)/g) || [];
-  hashtagMatches.forEach(match => {
-    const tag = match.substring(1).toLowerCase();
+  // Remove code blocks first to avoid matching inside them
+  const codeBlockPattern = /```[\s\S]*?```/g;
+  const inlineCodePattern = /`[^`]+`/g;
+  const urlPattern = /https?:\/\/[^\s<>"']+/g;
+  
+  let processedContent = content
+    .replace(codeBlockPattern, '') // Remove code blocks
+    .replace(inlineCodePattern, '') // Remove inline code
+    .replace(urlPattern, ''); // Remove URLs
+
+  // Extract hashtags: #hashtag (word boundary to avoid matching in URLs)
+  const hashtagPattern = /\B#([a-zA-Z0-9_]+)/g;
+  let match;
+  
+  while ((match = hashtagPattern.exec(processedContent)) !== null) {
+    const tag = match[1].toLowerCase();
     if (!seen.has(tag)) {
       hashtags.push(tag);
       seen.add(tag);
     }
-  });
+  }
 
   return hashtags;
 }
@@ -104,39 +117,35 @@ function extractLinks(content: string, linkBaseURL: string): Array<{ url: string
   const links: Array<{ url: string; text: string; isExternal: boolean }> = [];
   const seen = new Set<string>();
 
-  // Extract markdown links: [text](url)
-  const markdownLinks = content.match(/\[([^\]]+)\]\(([^)]+)\)/g) || [];
-  markdownLinks.forEach(match => {
-    const linkMatch = match.match(/\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch) {
-      const [, text, url] = linkMatch;
-      if (!seen.has(url) && !isNostrUrl(url)) {
-        seen.add(url);
-        links.push({
-          url,
-          text,
-          isExternal: isExternalUrl(url, linkBaseURL),
-        });
-      }
+  // Extract markdown links: [text](url) - optimized to avoid double matching
+  const markdownLinkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let markdownMatch;
+  while ((markdownMatch = markdownLinkPattern.exec(content)) !== null) {
+    const [, text, url] = markdownMatch;
+    if (!seen.has(url) && !isNostrUrl(url)) {
+      seen.add(url);
+      links.push({
+        url,
+        text,
+        isExternal: isExternalUrl(url, linkBaseURL),
+      });
     }
-  });
+  }
 
-  // Extract asciidoc links: link:url[text]
-  const asciidocLinks = content.match(/link:([^\[]+)\[([^\]]+)\]/g) || [];
-  asciidocLinks.forEach(match => {
-    const linkMatch = match.match(/link:([^\[]+)\[([^\]]+)\]/);
-    if (linkMatch) {
-      const [, url, text] = linkMatch;
-      if (!seen.has(url) && !isNostrUrl(url)) {
-        seen.add(url);
-        links.push({
-          url,
-          text,
-          isExternal: isExternalUrl(url, linkBaseURL),
-        });
-      }
+  // Extract asciidoc links: link:url[text] - optimized to avoid double matching
+  const asciidocLinkPattern = /link:([^\[]+)\[([^\]]+)\]/g;
+  let asciidocMatch;
+  while ((asciidocMatch = asciidocLinkPattern.exec(content)) !== null) {
+    const [, url, text] = asciidocMatch;
+    if (!seen.has(url) && !isNostrUrl(url)) {
+      seen.add(url);
+      links.push({
+        url,
+        text,
+        isExternal: isExternalUrl(url, linkBaseURL),
+      });
     }
-  });
+  }
 
   // Extract raw URLs (basic pattern)
   const urlPattern = /https?:\/\/[^\s<>"']+/g;
@@ -162,29 +171,31 @@ function extractMedia(content: string): string[] {
   const media: string[] = [];
   const seen = new Set<string>();
 
-  // Extract markdown images: ![alt](url)
-  const imageMatches = content.match(/!\[[^\]]*\]\(([^)]+)\)/g) || [];
-  imageMatches.forEach(match => {
-    const url = match.match(/!\[[^\]]*\]\(([^)]+)\)/)?.[1];
+  // Extract markdown images: ![alt](url) - optimized to avoid double matching
+  const markdownImagePattern = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let markdownImageMatch;
+  while ((markdownImageMatch = markdownImagePattern.exec(content)) !== null) {
+    const url = markdownImageMatch[1];
     if (url && !seen.has(url)) {
       if (isImageUrl(url) || isVideoUrl(url)) {
         media.push(url);
         seen.add(url);
       }
     }
-  });
+  }
 
-  // Extract asciidoc images: image::url[alt]
-  const asciidocImageMatches = content.match(/image::([^\[]+)\[/g) || [];
-  asciidocImageMatches.forEach(match => {
-    const url = match.match(/image::([^\[]+)\[/)?.[1];
+  // Extract asciidoc images: image::url[alt] - optimized to avoid double matching
+  const asciidocImagePattern = /image::([^\[]+)\[/g;
+  let asciidocImageMatch;
+  while ((asciidocImageMatch = asciidocImagePattern.exec(content)) !== null) {
+    const url = asciidocImageMatch[1];
     if (url && !seen.has(url)) {
       if (isImageUrl(url) || isVideoUrl(url)) {
         media.push(url);
         seen.add(url);
       }
     }
-  });
+  }
 
   // Extract raw image/video URLs
   const urlPattern = /https?:\/\/[^\s<>"']+/g;

@@ -27,21 +27,19 @@ export function detectFormat(content: string): ContentFormat {
     }
   }
 
-  // Check for Markdown indicators
+  // Check for Markdown indicators (more specific patterns to avoid false positives)
   const markdownIndicators = [
-    '# ',           // Heading
-    '## ',          // Subheading
-    '```',          // Code block
-    '**',           // Bold
-    '*',            // Italic or list
-    '- ',           // List item
-    '![',           // Image
-    '[',            // Link
+    /^#{1,6}\s+/m,           // Heading at start of line
+    /```[\s\S]*?```/,        // Code block
+    /\*\*[^*]+\*\*/,         // Bold text
+    /^[-*+]\s+/m,            // List item at start of line
+    /!\[[^\]]*\]\([^)]+\)/,  // Image syntax
+    /\[[^\]]+\]\([^)]+\)/,   // Link syntax
   ];
 
   let markdownScore = 0;
   for (const indicator of markdownIndicators) {
-    if (content.includes(indicator)) {
+    if (indicator.test(content)) {
       markdownScore++;
     }
   }

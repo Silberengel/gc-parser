@@ -67,8 +67,7 @@ function convertMarkdownToAsciidoc(content: string): string {
   asciidoc = asciidoc.replace(/([a-zA-Z0-9])\)([a-zA-Z0-9])/g, '$1) $2');
   asciidoc = asciidoc.replace(/([a-zA-Z0-9])==/g, '$1 ==');
 
-  // Preserve nostr: addresses temporarily
-  asciidoc = asciidoc.replace(/nostr:([a-z0-9]+)/g, 'nostr:$1');
+  // Note: nostr: addresses are processed later in processNostrAddresses
 
   // Convert headers
   asciidoc = asciidoc.replace(/^#{6}\s+(.+)$/gm, '====== $1 ======');
@@ -89,8 +88,8 @@ function convertMarkdownToAsciidoc(content: string): string {
   asciidoc = asciidoc.replace(/~(.+?)~/g, '[subscript]#$1#'); // Subscript
   asciidoc = asciidoc.replace(/\^(.+?)\^/g, '[superscript]#$1#'); // Superscript
 
-  // Convert code blocks
-  asciidoc = asciidoc.replace(/```(\w+)?\n([\s\S]*?)\n```/g, (_match, lang, code) => {
+  // Convert code blocks (handle both \n and \r\n line endings)
+  asciidoc = asciidoc.replace(/```(\w+)?\r?\n([\s\S]*?)\r?\n```/g, (_match, lang, code) => {
     const trimmedCode = code.trim();
     if (trimmedCode.length === 0) return '';
     
@@ -211,11 +210,15 @@ function convertMarkdownToAsciidoc(content: string): string {
 
 /**
  * Converts plain text to AsciiDoc format
+ * Preserves line breaks by converting single newlines to line continuations
  */
 function convertPlainTextToAsciidoc(content: string): string {
+  // Preserve double newlines (paragraph breaks)
+  // Convert single newlines to line continuations ( +\n)
   return content
-    .replace(/\n\n/g, '\n\n')
-    .replace(/\n/g, ' +\n');
+    .replace(/\r\n/g, '\n') // Normalize line endings
+    .replace(/\n\n+/g, '\n\n') // Normalize multiple newlines to double
+    .replace(/([^\n])\n([^\n])/g, '$1 +\n$2'); // Single newlines become line continuations
 }
 
 /**
@@ -254,10 +257,13 @@ function processWikilinks(content: string, linkBaseURL: string): string {
 /**
  * Processes nostr: addresses
  * Converts to link:nostr:...[...] format
+ * Valid bech32 prefixes: npub, nprofile, nevent, naddr, note
  */
 function processNostrAddresses(content: string, linkBaseURL: string): string {
-  // Match nostr: followed by valid bech32 string
-  return content.replace(/nostr:([a-z0-9]+[a-z0-9]{6,})/g, (_match, bech32Id) => {
+  // Match nostr: followed by valid bech32 prefix and identifier
+  // Bech32 format: prefix + separator (1) + data (at least 6 chars for valid identifiers)
+  const nostrPattern = /nostr:((?:npub|nprofile|nevent|naddr|note)1[a-z0-9]{6,})/gi;
+  return content.replace(nostrPattern, (_match, bech32Id) => {
     return `link:nostr:${bech32Id}[${bech32Id}]`;
   });
 }

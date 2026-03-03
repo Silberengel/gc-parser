@@ -32,14 +32,14 @@ export function extractTOC(html: string): { toc: string; contentWithoutTOC: stri
     return { toc: '', contentWithoutTOC: html };
   }
 
-  // Find the matching closing tag by counting div tags
+  // Find the matching closing tag by counting div/nav tags
   const searchStart = tocStartIdx + tocStartTag.length;
   let depth = 1;
   let i = searchStart;
 
   while (i < html.length && depth > 0) {
     // Look for opening or closing div/nav tags
-    if (i + 4 < html.length && html.substring(i, i + 4) === '<div') {
+    if (i + 4 < html.length && html.substring(i, i + 4).toLowerCase() === '<div') {
       // Check if it's a closing tag
       if (i + 5 < html.length && html[i + 4] === '/') {
         depth--;
@@ -47,24 +47,34 @@ export function extractTOC(html: string): { toc: string; contentWithoutTOC: stri
         if (closeIdx === -1) break;
         i = closeIdx + 1;
       } else {
-        // Opening tag - find the end
+        // Opening tag - find the end (handle attributes and self-closing)
         const closeIdx = html.indexOf('>', i);
         if (closeIdx === -1) break;
-        // Check if it's self-closing
-        if (html[closeIdx - 1] !== '/') {
+        // Check if it's self-closing (look for /> before the >)
+        const tagContent = html.substring(i, closeIdx);
+        if (!tagContent.endsWith('/')) {
           depth++;
         }
         i = closeIdx + 1;
       }
-    } else if (i + 5 < html.length && html.substring(i, i + 5) === '</div') {
+    } else if (i + 5 < html.length && html.substring(i, i + 5).toLowerCase() === '</div') {
       depth--;
       const closeIdx = html.indexOf('>', i);
       if (closeIdx === -1) break;
       i = closeIdx + 1;
-    } else if (i + 5 < html.length && html.substring(i, i + 5) === '</nav') {
+    } else if (i + 5 < html.length && html.substring(i, i + 5).toLowerCase() === '</nav') {
       depth--;
       const closeIdx = html.indexOf('>', i);
       if (closeIdx === -1) break;
+      i = closeIdx + 1;
+    } else if (i + 4 < html.length && html.substring(i, i + 4).toLowerCase() === '<nav') {
+      // Handle opening nav tags
+      const closeIdx = html.indexOf('>', i);
+      if (closeIdx === -1) break;
+      const tagContent = html.substring(i, closeIdx);
+      if (!tagContent.endsWith('/')) {
+        depth++;
+      }
       i = closeIdx + 1;
     } else {
       i++;
@@ -119,15 +129,30 @@ export function sanitizeHTML(html: string): string {
 
 /**
  * Processes HTML links to add target="_blank" to external links
+ * This function is available for use but not currently called automatically.
+ * It can be used in post-processing if needed.
  */
 export function processLinks(html: string, linkBaseURL: string): string {
   // Extract domain from linkBaseURL for comparison
   let linkBaseDomain = '';
   if (linkBaseURL) {
-    const url = linkBaseURL.replace(/^https?:\/\//, '');
-    const parts = url.split('/');
-    if (parts.length > 0) {
-      linkBaseDomain = parts[0];
+    try {
+      // Use URL constructor if available (Node.js 10+)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const URLConstructor = (globalThis as any).URL;
+      if (URLConstructor) {
+        const url = new URLConstructor(linkBaseURL);
+        linkBaseDomain = url.hostname;
+      } else {
+        throw new Error('URL not available');
+      }
+    } catch {
+      // Fallback to simple string parsing if URL constructor fails
+      const url = linkBaseURL.replace(/^https?:\/\//, '');
+      const parts = url.split('/');
+      if (parts.length > 0) {
+        linkBaseDomain = parts[0];
+      }
     }
   }
 
@@ -140,9 +165,25 @@ export function processLinks(html: string, linkBaseURL: string): string {
 
     if (isExternal) {
       // Check if it's pointing to our own domain
-      if (linkBaseDomain && href.includes(linkBaseDomain)) {
-        // Same domain - open in same tab (remove any existing target attribute)
-        return match.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+      if (linkBaseDomain) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const URLConstructor = (globalThis as any).URL;
+          if (URLConstructor) {
+            const hrefUrl = new URLConstructor(href);
+            if (hrefUrl.hostname === linkBaseDomain) {
+              // Same domain - open in same tab (remove any existing target attribute)
+              return match.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+            }
+          } else {
+            throw new Error('URL not available');
+          }
+        } catch {
+          // If URL parsing fails, use simple string check
+          if (href.includes(linkBaseDomain)) {
+            return match.replace(/\s*target\s*=\s*["'][^"']*["']/gi, '');
+          }
+        }
       }
 
       // External link - add target="_blank" and rel="noopener noreferrer" if not already present

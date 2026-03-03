@@ -120,9 +120,18 @@ export async function processAsciidoc(
       media: [],
     };
   } catch (error) {
-    // Fallback to plain text
+    // Fallback to plain text with error logging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    // Use process.stderr.write for Node.js compatibility instead of console.error
+    if (typeof process !== 'undefined' && process.stderr) {
+      process.stderr.write(`Error processing AsciiDoc: ${errorMessage}\n`);
+    }
+    
+    // Escape HTML in content for safe display
+    const escapedContent = sanitizeHTML(content);
+    
     return {
-      content: `<p>${sanitizeHTML(content)}</p>`,
+      content: `<p>${escapedContent}</p>`,
       tableOfContents: '',
       hasLaTeX: false,
       hasMusicalNotation: false,

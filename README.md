@@ -3,9 +3,7 @@
 A super-parser for Nostr event content that handles multiple content formats including AsciiDoc, Markdown, code syntax highlighting, LaTeX, musical notation, and `nostr:` prefixed addresses.
 
 Built with TypeScript/JavaScript using:
-- **asciidoctor.js** for AsciiDoc processing
-- **marked** for Markdown processing
-- **highlight.js** for code syntax highlighting
+- **@asciidoctor/core** for AsciiDoc processing (includes Markdown-to-AsciiDoc conversion and highlight.js integration)
 
 ## Features
 

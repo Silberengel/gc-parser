@@ -19,7 +19,16 @@ export function postProcessHtml(html: string, options: PostProcessOptions = {}):
 
   // Convert hashtag links to HTML
   processed = processed.replace(/hashtag:([^[]+)\[([^\]]+)\]/g, (_match, normalizedHashtag, displayText) => {
-    return `<a href="/notes?t=${normalizedHashtag}" class="hashtag-link text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline">${displayText}</a>`;
+    // URL encode the hashtag to prevent XSS
+    const encodedHashtag = encodeURIComponent(normalizedHashtag);
+    // HTML escape the display text
+    const escapedDisplay = displayText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    return `<a href="/notes?t=${encodedHashtag}" class="hashtag-link text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline">${escapedDisplay}</a>`;
   });
 
   // Convert wikilink:dtag[display] format to HTML
@@ -105,7 +114,7 @@ function processImages(html: string): string {
     let updatedAttributes = attributes;
     
     if (updatedAttributes.match(/class=["']/i)) {
-      updatedAttributes = updatedAttributes.replace(/class=["']([^"']*)["']/i, (_match, classes) => {
+      updatedAttributes = updatedAttributes.replace(/class=["']([^"']*)["']/i, (_match: string, classes: string) => {
         const cleanedClasses = classes.replace(/max-w-\[?[^\s\]]+\]?/g, '').trim();
         const newClasses = cleanedClasses 
           ? `${cleanedClasses} max-w-[400px] object-contain cursor-zoom-in`
