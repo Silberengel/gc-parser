@@ -15,7 +15,9 @@ export function detectFormat(content: string): ContentFormat {
     '----',         // Listing block
     '....',         // Literal block
     '|===',         // Table
-    ':',            // Attribute (common in AsciiDoc)
+    'link:',        // AsciiDoc link format
+    'wikilink:',    // Wikilink macro
+    'hashtag:',     // Hashtag macro
   ];
 
   let asciidocScore = 0;
