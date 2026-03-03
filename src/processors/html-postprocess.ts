@@ -2,7 +2,6 @@ import { processMusicalNotation } from './music';
 
 export interface PostProcessOptions {
   enableMusicalNotation?: boolean;
-  linkBaseURL?: string;
 }
 
 /**
@@ -32,23 +31,11 @@ export function postProcessHtml(html: string, options: PostProcessOptions = {}):
     return `<a href="/notes?t=${encodedHashtag}" class="hashtag-link text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline">${escapedDisplay}</a>`;
   });
 
-  // Convert WIKILINK:dtag|display placeholder format to HTML
-  // Match WIKILINK:dtag|display, ensuring we don't match across HTML tags
-  processed = processed.replace(/WIKILINK:([^|<>]+)\|([^<>\s]+)/g, (_match, dTag, displayText) => {
-    const escapedDtag = dTag.trim().replace(/"/g, '&quot;');
-    const escapedDisplay = displayText.trim()
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-    
-    // Generate the proper URL using linkBaseURL if available
-    const url = options.linkBaseURL 
-      ? `${options.linkBaseURL}/events?d=${escapedDtag}`
-      : `#${escapedDtag}`;
-    
-    return `<a class="wikilink text-primary-600 dark:text-primary-500 hover:underline" data-dtag="${escapedDtag}" data-url="${url}" href="${url}">${escapedDisplay}</a>`;
+  // Convert wikilink:dtag[display] format to HTML
+  processed = processed.replace(/wikilink:([^[]+)\[([^\]]+)\]/g, (_match, dTag, displayText) => {
+    const escapedDtag = dTag.replace(/"/g, '&quot;');
+    const escapedDisplay = displayText.replace(/"/g, '&quot;');
+    return `<span class="wikilink cursor-pointer text-blue-600 hover:text-blue-800 hover:underline border-b border-dotted border-blue-300" data-dtag="${escapedDtag}" data-display="${escapedDisplay}">${displayText}</span>`;
   });
 
   // Convert nostr: links to HTML
