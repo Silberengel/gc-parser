@@ -1,0 +1,72 @@
+
+
+This is a test unordered list with mixed bullets:
+
+* First item with a number 2. in it
+* Second item
+* Third item
+        * Indented item
+        * Indented item
+* Fourth item 
+
+
+Another unordered list:
+
+* 1st item
+* 2nd item
+* third item containing _italic_ text
+    * indented item
+    * second indented item
+* fourth item
+
+
+This is a test ordered list with indented items:
+
+. First item
+. Second item
+. Third item
+        . Indented item
+        . Indented item
+. Fourth item
+
+
+Ordered list where everything has the same number:
+
+. First item
+. Second item
+. Third item
+. Fourth item 
+
+
+Ordered list that is wrongly numbered:
+
+. First item
+. Second item
+. Third item
+. Fourth item
+
+
+This is a mixed list with indented items:
+
+. First item
+. Second item
+. Third item
+
+        * Indented item
+        * Indented item
+
+. Fourth item
+
+
+This is another mixed list with indented items:
+
+* First item
+* Second item
+* Third item
+
+        . Indented item
+        . Indented item
+
+* Fourth item
+
+

@@ -3,6 +3,7 @@ import { detectFormat } from './detector';
 import { convertToAsciidoc } from './converters/to-asciidoc';
 import { processAsciidoc } from './processors/asciidoc';
 import { extractMetadata } from './extractors/metadata';
+import { extractFrontmatter } from './extractors/frontmatter';
 
 /**
  * Default parser options
@@ -27,7 +28,7 @@ export function defaultOptions(): ParserOptions {
  * Everything is converted to AsciiDoc first, then processed through AsciiDoctor
  */
 export class Parser {
-  private options: Required<ParserOptions>;
+  private options: Required<Omit<ParserOptions, 'wikilinkUrl' | 'hashtagUrl'>> & Pick<ParserOptions, 'wikilinkUrl' | 'hashtagUrl'>;
 
   constructor(options: ParserOptions = {}) {
     const defaults = defaultOptions();
@@ -39,6 +40,8 @@ export class Parser {
       enableLaTeX: options.enableLaTeX ?? defaults.enableLaTeX ?? true,
       enableMusicalNotation: options.enableMusicalNotation ?? defaults.enableMusicalNotation ?? true,
       enableNostrAddresses: options.enableNostrAddresses ?? defaults.enableNostrAddresses ?? true,
+      wikilinkUrl: options.wikilinkUrl ?? defaults.wikilinkUrl,
+      hashtagUrl: options.hashtagUrl ?? defaults.hashtagUrl,
     };
   }
 
@@ -48,15 +51,18 @@ export class Parser {
    * Everything is converted to AsciiDoc first, then processed through AsciiDoctor
    */
   async process(content: string): Promise<ProcessResult> {
-    // Extract metadata from original content (before conversion)
-    const metadata = extractMetadata(content, this.options.linkBaseURL);
+    // Extract frontmatter first (before any other processing)
+    const { frontmatter, content: contentWithoutFrontmatter } = extractFrontmatter(content);
+    
+    // Extract metadata from content (after removing frontmatter)
+    const metadata = extractMetadata(contentWithoutFrontmatter, this.options.linkBaseURL);
 
-    // Detect content format
-    const format = detectFormat(content);
+    // Detect content format (on content without frontmatter)
+    const format = detectFormat(contentWithoutFrontmatter);
 
     // Convert everything to AsciiDoc format first
     const asciidocContent = convertToAsciidoc(
-      content,
+      contentWithoutFrontmatter,
       format,
       this.options.linkBaseURL,
       {
@@ -71,14 +77,17 @@ export class Parser {
         enableCodeHighlighting: this.options.enableCodeHighlighting,
         enableLaTeX: this.options.enableLaTeX,
         enableMusicalNotation: this.options.enableMusicalNotation,
-        originalContent: content, // Pass original for LaTeX detection
+        originalContent: contentWithoutFrontmatter, // Pass original for LaTeX detection
         linkBaseURL: this.options.linkBaseURL, // Pass linkBaseURL for link processing
+        wikilinkUrl: this.options.wikilinkUrl, // Pass wikilink URL format
+        hashtagUrl: this.options.hashtagUrl, // Pass hashtag URL format
       }
     );
 
-    // Combine with extracted metadata
+    // Combine with extracted metadata and frontmatter
     return {
       ...result,
+      frontmatter,
       nostrLinks: metadata.nostrLinks,
       wikilinks: metadata.wikilinks,
       hashtags: metadata.hashtags,

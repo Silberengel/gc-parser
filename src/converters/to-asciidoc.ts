@@ -1,5 +1,89 @@
 import { ContentFormat } from '../types';
 
+// Import node-emoji if available (optional dependency)
+let emoji: any;
+try {
+  emoji = require('node-emoji');
+} catch (e) {
+  // node-emoji not available, emoji conversion will be skipped
+  emoji = null;
+}
+
+/**
+ * Clean URL by removing tracking parameters
+ * Based on jumble's cleanUrl function
+ */
+function cleanUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url);
+    
+    // List of tracking parameter prefixes and exact names to remove
+    const trackingParams = [
+      // Google Analytics & Ads
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+      'utm_id', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic',
+      'gclid', 'gclsrc', 'dclid', 'gbraid', 'wbraid',
+      
+      // Facebook
+      'fbclid', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fb_ref',
+      
+      // Twitter/X
+      'twclid', 'twsrc',
+      
+      // Microsoft/Bing
+      'msclkid', 'mc_cid', 'mc_eid',
+      
+      // Adobe
+      'adobe_mc', 'adobe_mc_ref', 'adobe_mc_sdid',
+      
+      // Mailchimp
+      'mc_cid', 'mc_eid',
+      
+      // HubSpot
+      'hsCtaTracking', 'hsa_acc', 'hsa_cam', 'hsa_grp', 'hsa_ad', 'hsa_src', 'hsa_tgt', 'hsa_kw', 'hsa_mt', 'hsa_net', 'hsa_ver',
+      
+      // Marketo
+      'mkt_tok',
+      
+      // YouTube
+      'si', 'feature', 'kw', 'pp',
+      
+      // Other common tracking
+      'ref', 'referrer', 'source', 'campaign', 'medium', 'content',
+      'yclid', 'srsltid', '_ga', '_gl', 'igshid', 'epik', 'pk_campaign', 'pk_kwd',
+      
+      // Mobile app tracking
+      'adjust_tracker', 'adjust_campaign', 'adjust_adgroup', 'adjust_creative',
+      
+      // Amazon
+      'tag', 'linkCode', 'creative', 'creativeASIN', 'linkId', 'ascsubtag',
+      
+      // Affiliate tracking
+      'aff_id', 'affiliate_id', 'aff', 'ref_', 'refer',
+      
+      // Social media share tracking
+      'share', 'shared', 'sharesource'
+    ];
+    
+    // Remove all tracking parameters
+    trackingParams.forEach(param => {
+      parsedUrl.searchParams.delete(param);
+    });
+    
+    // Remove any parameter that starts with utm_ or _
+    Array.from(parsedUrl.searchParams.keys()).forEach(key => {
+      if (key.startsWith('utm_') || key.startsWith('_')) {
+        parsedUrl.searchParams.delete(key);
+      }
+    });
+    
+    return parsedUrl.toString();
+  } catch {
+    // If URL parsing fails, return original URL
+    return url;
+  }
+}
+
 export interface ConvertOptions {
   enableNostrAddresses?: boolean;
 }
@@ -146,13 +230,54 @@ function convertMarkdownToAsciidoc(content: string): string {
   asciidoc = asciidoc.replace(/\*(.+?)\*/g, '_$1_'); // Italic
   asciidoc = asciidoc.replace(/_(.+?)_/g, '_$1_'); // Italic
   asciidoc = asciidoc.replace(/~~(.+?)~~/g, '[line-through]#$1#'); // Strikethrough
+  asciidoc = asciidoc.replace(/==(.+?)==/g, '[highlight]#$1#'); // Text highlighting (GFM)
   asciidoc = asciidoc.replace(/~(.+?)~/g, '[subscript]#$1#'); // Subscript
   asciidoc = asciidoc.replace(/\^(.+?)\^/g, '[superscript]#$1#'); // Superscript
 
+  // Convert emoji shortcodes to Unicode (e.g., :tent: -> 🏕️)
+  // Only convert if node-emoji is available
+  if (emoji && emoji.emojify) {
+    asciidoc = emoji.emojify(asciidoc);
+  }
+
   // Convert code blocks (handle both \n and \r\n line endings)
+  // Special handling for diagram languages: latex, plantuml, puml, bpmn
   asciidoc = asciidoc.replace(/```(\w+)?\r?\n([\s\S]*?)\r?\n```/g, (_match, lang, code) => {
     const trimmedCode = code.trim();
     if (trimmedCode.length === 0) return '';
+    
+    const langLower = lang ? lang.toLowerCase() : '';
+    
+    // If it's a latex code block, always treat as code (not math)
+    if (langLower === 'latex') {
+      return `[source,latex]\n----\n${trimmedCode}\n----`;
+    }
+    
+    // Handle PlantUML diagrams
+    if (langLower === 'plantuml' || langLower === 'puml') {
+      // Check if it already has @startuml/@enduml or @startbpmn/@endbpmn
+      if (trimmedCode.includes('@start') || trimmedCode.includes('@end')) {
+        return `[plantuml]\n----\n${trimmedCode}\n----`;
+      }
+      // If not, wrap it in @startuml/@enduml
+      return `[plantuml]\n----\n@startuml\n${trimmedCode}\n@enduml\n----`;
+    }
+    
+    // Handle BPMN diagrams (using PlantUML BPMN syntax)
+    if (langLower === 'bpmn') {
+      // Check if it already has @startbpmn/@endbpmn
+      if (trimmedCode.includes('@startbpmn') && trimmedCode.includes('@endbpmn')) {
+        return `[plantuml]\n----\n${trimmedCode}\n----`;
+      }
+      // If not, wrap it in @startbpmn/@endbpmn
+      return `[plantuml]\n----\n@startbpmn\n${trimmedCode}\n@endbpmn\n----`;
+    }
+    
+    // Check if it's ABC notation (starts with X:)
+    if (!lang && /^X:\s*\d+/m.test(trimmedCode)) {
+      // ABC notation - keep as plain text block, will be processed by music processor
+      return `----\n${trimmedCode}\n----`;
+    }
     
     const hasCodePatterns = /[{}();=<>]|function|class|import|export|def |if |for |while |return |const |let |var |public |private |static |console\.log/.test(trimmedCode);
     const isLikelyText = /^[A-Za-z\s.,!?\-'"]+$/.test(trimmedCode) && trimmedCode.length > 50;
@@ -165,55 +290,186 @@ function convertMarkdownToAsciidoc(content: string): string {
     
     return `[source${lang ? ',' + lang : ''}]\n----\n${trimmedCode}\n----`;
   });
-  asciidoc = asciidoc.replace(/`([^`]+)`/g, '`$1`'); // Inline code
-  asciidoc = asciidoc.replace(/`\$([^$]+)\$`/g, '`$\\$1\\$$`'); // Preserve LaTeX in code
+  
+  // Handle inline code: LaTeX formulas in inline code should be rendered as math
+  // Pattern: `$formula$` should become $formula$ (math), not code
+  // Handle escaped brackets: `$[ ... \]$` and `$[\sqrt{...}\]$`
+  asciidoc = asciidoc.replace(/`(\$[^`]+\$)`/g, (match, formula) => {
+    // Extract the formula (remove the $ signs)
+    const mathContent = formula.slice(1, -1);
+    return `$${mathContent}$`; // Return as math, not code
+  });
+  asciidoc = asciidoc.replace(/`([^`]+)`/g, '`$1`'); // Regular inline code
 
-  // Convert images first (before links, since images are links with ! prefix)
+  // Convert nested image links first: [![alt](img)](url) - image wrapped in link
+  // This must come before regular image processing
+  asciidoc = asciidoc.replace(/\[!\[([^\]]*)\]\(([^)]+?)\)\]\(([^)]+?)\)/g, (match, alt, imgUrl, linkUrl) => {
+    const cleanImgUrl = imgUrl.trim();
+    const cleanLinkUrl = linkUrl.trim();
+    const cleanAlt = alt.trim();
+    
+    // Check if linkUrl is a media URL
+    if (cleanLinkUrl.startsWith('MEDIA:')) {
+      return cleanLinkUrl; // Return the placeholder as-is
+    }
+    
+    // Create a link with an image inside - don't escape brackets in URLs
+    // AsciiDoc can handle URLs with brackets if they're in the URL part
+    return `link:${cleanLinkUrl}[image:${cleanImgUrl}[${cleanAlt ? cleanAlt : 'link'}]]`;
+  });
+
+  // Convert images (but not nested ones, which we already processed)
   // Match: ![alt text](url) or ![](url) - handle empty alt text
-  // Use non-greedy matching to stop at first closing paren
-  asciidoc = asciidoc.replace(/!\[([^\]]*)\]\(([^)]+?)\)/g, (match, alt, url) => {
-    const cleanUrl = url.trim();
+  // Use negative lookbehind to avoid matching nested image links
+  // Format: image::url[alt,width=100%] - matching jumble's format
+  asciidoc = asciidoc.replace(/(?<!\[)!\[([^\]]*)\]\(([^)]+?)\)/g, (match, alt, url) => {
+    let processedUrl = url.trim();
     const cleanAlt = alt.trim();
     
     // Check if it's already a MEDIA: placeholder (processed by processMediaUrlsInMarkdown)
-    if (cleanUrl.startsWith('MEDIA:')) {
-      return cleanUrl; // Return the placeholder as-is
+    if (processedUrl.startsWith('MEDIA:')) {
+      return processedUrl; // Return the placeholder as-is
     }
     
-    // Regular image - escape special characters in URL for AsciiDoc
-    const escapedUrl = cleanUrl.replace(/([\[\]])/g, '\\$1');
-    return `image::${escapedUrl}[${cleanAlt ? cleanAlt + ', ' : ''}width=100%]`;
+    // Clean URL (remove tracking parameters)
+    processedUrl = cleanUrl(processedUrl);
+    
+    // Regular image - match jumble's format: image::url[alt,width=100%]
+    // Don't escape brackets - AsciiDoc handles URLs properly
+    return `image::${processedUrl}[${cleanAlt ? cleanAlt + ',' : ''}width=100%]`;
   });
 
-  // Convert links (but not images, which we already processed)
+  // Convert anchor links: [text](#section-id) - these are internal links
+  asciidoc = asciidoc.replace(/(?<!!)\[([^\]]+)\]\(#([^)]+)\)/g, (match, text, anchor) => {
+    const cleanText = text.trim();
+    const cleanAnchor = anchor.trim();
+    // AsciiDoc uses # for anchor links, but we need to normalize the anchor ID
+    // Convert to lowercase and replace spaces/special chars with hyphens
+    const normalizedAnchor = cleanAnchor.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const escapedText = cleanText.replace(/([\[\]])/g, '\\$1');
+    return `<<${normalizedAnchor},${escapedText}>>`;
+  });
+
+  // Convert links (but not images or anchor links, which we already processed)
   // Match: [text](url) - use negative lookbehind to avoid matching images
   // Use non-greedy matching for URL to stop at first closing paren
   // This ensures we don't capture trailing punctuation
   asciidoc = asciidoc.replace(/(?<!!)\[([^\]]+)\]\(([^)]+?)\)/g, (match, text, url) => {
-    const cleanUrl = url.trim();
+    let processedUrl = url.trim();
     const cleanText = text.trim();
     
     // Check if it's already a MEDIA: placeholder (processed by processMediaUrlsInMarkdown)
-    if (cleanUrl.startsWith('MEDIA:')) {
-      return cleanUrl; // Return the placeholder as-is
+    if (processedUrl.startsWith('MEDIA:')) {
+      return processedUrl; // Return the placeholder as-is
     }
     
-    // Regular link - escape special AsciiDoc characters in both URL and text
-    const escapedUrl = cleanUrl.replace(/([\[\]])/g, '\\$1');
+    // Clean URL (remove tracking parameters)
+    processedUrl = cleanUrl(processedUrl);
+    
+    // Handle WSS URLs: convert wss:// to https:// for display
+    if (processedUrl.startsWith('wss://')) {
+      processedUrl = processedUrl.replace(/^wss:\/\//, 'https://');
+    }
+    
+    // Regular link - don't escape brackets in URLs (AsciiDoc handles them)
+    // Only escape brackets in the link text if needed
     const escapedText = cleanText.replace(/([\[\]])/g, '\\$1');
-    return `link:${escapedUrl}[${escapedText}]`;
+    return `link:${processedUrl}[${escapedText}]`;
   });
 
   // Convert horizontal rules
   asciidoc = asciidoc.replace(/^---$/gm, '\'\'\'');
+  asciidoc = asciidoc.replace(/^\*\*\*$/gm, '\'\'\''); // Also handle ***
 
-  // Convert unordered lists
-  asciidoc = asciidoc.replace(/^(\s*)\*\s+(.+)$/gm, '$1* $2');
-  asciidoc = asciidoc.replace(/^(\s*)-\s+(.+)$/gm, '$1* $2');
-  asciidoc = asciidoc.replace(/^(\s*)\+\s+(.+)$/gm, '$1* $2');
+  // Convert lists - need to process them as blocks to preserve structure
+  // First, convert task lists (before regular lists)
+  // Task lists: - [x] or - [ ] or * [x] or * [ ]
+  asciidoc = asciidoc.replace(/^(\s*)([-*])\s+\[([ x])\]\s+(.+)$/gm, (_match, indent, bullet, checked, text) => {
+    // Use AsciiDoc checkbox syntax: * [x] Task text
+    // The checkbox will be rendered by AsciiDoctor
+    return `${indent}* [${checked === 'x' ? 'x' : ' '}] ${text}`;
+  });
 
-  // Convert ordered lists
-  asciidoc = asciidoc.replace(/^(\s*)\d+\.\s+(.+)$/gm, '$1. $2');
+  // Convert lists - process entire list blocks to ensure proper AsciiDoc formatting
+  // AsciiDoc lists need to be on their own lines with proper spacing
+  // Process lists in blocks to handle nested lists correctly
+  const lines = asciidoc.split('\n');
+  const processedLines: string[] = [];
+  let inList = false;
+  let listType: 'unordered' | 'ordered' | null = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isEmpty = line.trim() === '';
+    const prevLine = i > 0 ? processedLines[processedLines.length - 1] : '';
+    const prevLineIsEmpty = prevLine.trim() === '';
+    
+    // Check if this line is a list item (but not a task list, which we already processed)
+    const unorderedMatch = line.match(/^(\s*)([-*+])\s+(.+)$/);
+    const orderedMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+    const isTaskList = line.match(/^(\s*)([-*])\s+\[([ x])\]\s+(.+)$/);
+    
+    if (unorderedMatch && !isTaskList) {
+      const [, indent, , text] = unorderedMatch;
+      const indentLevel = indent.length;
+      // AsciiDoc uses 4 spaces per indentation level
+      // Markdown typically uses 2 or 4 spaces per level
+      // 2 spaces = 1 level (4 spaces), 4 spaces = 1 level (4 spaces)
+      const asciidocIndent = '    '.repeat(Math.ceil(indentLevel / 4));
+      
+      // Add blank line before list if not already in a list
+      // But don't add blank line if we're switching list types within the same list context
+      if (!inList) {
+        // Starting a new list - add blank line if previous line has content
+        if (processedLines.length > 0 && !prevLineIsEmpty) {
+          processedLines.push('');
+        }
+        inList = true;
+        listType = 'unordered';
+      } else if (listType !== 'unordered') {
+        // Switching list types - don't add blank line, just change type
+        listType = 'unordered';
+      }
+      
+      processedLines.push(`${asciidocIndent}* ${text}`);
+    } else if (orderedMatch) {
+      const [, indent, , text] = orderedMatch;
+      const indentLevel = indent.length;
+      // AsciiDoc uses 4 spaces per indentation level
+      // Markdown typically uses 2 or 4 spaces per level
+      // 2 spaces = 1 level (4 spaces), 4 spaces = 1 level (4 spaces)
+      const asciidocIndent = '    '.repeat(Math.ceil(indentLevel / 4));
+      
+      // Add blank line before list if not already in a list
+      // But don't add blank line if we're switching list types within the same list context
+      if (!inList) {
+        // Starting a new list - add blank line if previous line has content
+        if (processedLines.length > 0 && !prevLineIsEmpty) {
+          processedLines.push('');
+        }
+        inList = true;
+        listType = 'ordered';
+      } else if (listType !== 'ordered') {
+        // Switching list types - don't add blank line, just change type
+        listType = 'ordered';
+      }
+      
+      processedLines.push(`${asciidocIndent}. ${text}`);
+    } else {
+      // Not a list item
+      if (inList && !isEmpty) {
+        // End of list - add blank line after if the next line is not empty
+        if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+          processedLines.push('');
+        }
+        inList = false;
+        listType = null;
+      }
+      processedLines.push(line);
+    }
+  }
+  
+  asciidoc = processedLines.join('\n');
 
   // Convert blockquotes with attribution
   asciidoc = asciidoc.replace(/^(>\s+.+(?:\n>\s+.+)*)/gm, (match) => {
@@ -258,8 +514,8 @@ function convertMarkdownToAsciidoc(content: string): string {
     }
   });
 
-  // Convert tables
-  asciidoc = asciidoc.replace(/(\|.*\|[\r\n]+\|[\s\-\|]*[\r\n]+(\|.*\|[\r\n]+)*)/g, (match) => {
+  // Convert tables with alignment support
+  asciidoc = asciidoc.replace(/(\|.*\|[\r\n]+\|[\s\-\|:]*[\r\n]+(\|.*\|[\r\n]+)*)/g, (match) => {
     const lines = match.trim().split('\n').filter(line => line.trim());
     if (lines.length < 2) return match;
     
@@ -269,7 +525,31 @@ function convertMarkdownToAsciidoc(content: string): string {
     
     if (!separatorRow.includes('-')) return match;
     
-    let tableAsciidoc = '[cols="1,1"]\n|===\n';
+    // Parse alignment from separator row
+    // :--- = left, :----: = center, ---: = right, --- = default
+    const cells = separatorRow.split('|').filter(c => c.trim());
+    const alignments: string[] = [];
+    
+    cells.forEach((cell, index) => {
+      const trimmed = cell.trim();
+      if (trimmed.startsWith(':') && trimmed.endsWith(':')) {
+        alignments[index] = '^'; // center (AsciiDoc uses ^ for center)
+      } else if (trimmed.endsWith(':')) {
+        alignments[index] = '>'; // right
+      } else if (trimmed.startsWith(':')) {
+        alignments[index] = '<'; // left (explicit)
+      } else {
+        alignments[index] = '<'; // default left
+      }
+    });
+    
+    // Build cols attribute with alignments
+    const colsAttr = alignments.length > 0 
+      ? `[cols="${alignments.join(',')}"]`
+      : '';
+    
+    let tableAsciidoc = colsAttr ? `${colsAttr}\n` : '';
+    tableAsciidoc += '|===\n';
     tableAsciidoc += headerRow + '\n';
     dataRows.forEach(row => {
       tableAsciidoc += row + '\n';
@@ -349,12 +629,14 @@ function processWikilinks(content: string, linkBaseURL: string): string {
 
 /**
  * Processes nostr: addresses
+ * Only processes addresses with "nostr:" prefix - bare addresses are left as plaintext
  * Converts to link:nostr:...[...] format
  * Valid bech32 prefixes: npub, nprofile, nevent, naddr, note
  */
 function processNostrAddresses(content: string, linkBaseURL: string): string {
   // Match nostr: followed by valid bech32 prefix and identifier
   // Bech32 format: prefix + separator (1) + data (at least 6 chars for valid identifiers)
+  // Only match if it has "nostr:" prefix - bare addresses should remain as plaintext
   const nostrPattern = /nostr:((?:npub|nprofile|nevent|naddr|note)1[a-z0-9]{6,})/gi;
   return content.replace(nostrPattern, (_match, bech32Id) => {
     return `link:nostr:${bech32Id}[${bech32Id}]`;
@@ -427,26 +709,93 @@ function processMediaUrls(content: string): string {
 
 /**
  * Processes bare URLs and converts them to AsciiDoc links
- * Matches http://, https://, and www. URLs that aren't already in markdown links
+ * Matches http://, https://, wss://, and www. URLs that aren't already in markdown links
+ * Also handles bare image URLs (converts to images)
+ * Skips URLs inside code blocks (---- blocks) and inline code (backticks)
  */
 function processBareUrls(content: string): string {
-  // Match URLs that aren't already in markdown link format
-  // Pattern: http://, https://, or www. followed by valid URL characters
-  // Use negative lookbehind to avoid matching URLs inside parentheses (markdown links)
-  // Match URLs that are not preceded by ]( (which would be a markdown link)
-  const urlPattern = /(?<!\]\()\b(https?:\/\/[^\s<>"{}|\\^`\[\]()]+|www\.[^\s<>"{}|\\^`\[\]()]+)/gi;
+  // Protect code blocks and inline code from URL processing
+  // We'll process URLs, then restore code blocks
+  const codeBlockPlaceholders: string[] = [];
+  const inlineCodePlaceholders: string[] = [];
   
-  return content.replace(urlPattern, (match, url) => {
+  // Replace code blocks with placeholders
+  content = content.replace(/\[source[^\]]*\]\n----\n([\s\S]*?)\n----/g, (match, code) => {
+    const placeholder = `__CODEBLOCK_${codeBlockPlaceholders.length}__`;
+    codeBlockPlaceholders.push(match);
+    return placeholder;
+  });
+  
+  // Also handle plain code blocks (without [source])
+  content = content.replace(/----\n([\s\S]*?)\n----/g, (match, code) => {
+    // Check if this is already a placeholder
+    if (match.includes('__CODEBLOCK_')) {
+      return match;
+    }
+    const placeholder = `__CODEBLOCK_${codeBlockPlaceholders.length}__`;
+    codeBlockPlaceholders.push(match);
+    return placeholder;
+  });
+  
+  // Replace inline code with placeholders
+  content = content.replace(/`([^`]+)`/g, (match, code) => {
+    const placeholder = `__INLINECODE_${inlineCodePlaceholders.length}__`;
+    inlineCodePlaceholders.push(match);
+    return placeholder;
+  });
+  
+  // First, handle bare image URLs (before regular URLs)
+  // Match image URLs: .jpg, .png, .gif, .webp, .svg, etc.
+  // Format: image::url[width=100%] - matching jumble's format
+  const imageUrlPattern = /(?<!\]\()\b(https?:\/\/[^\s<>"{}|\\^`\[\]()]+\.(jpe?g|png|gif|webp|svg|bmp|ico))(?:\?[^\s<>"{}|\\^`\[\]()]*)?/gi;
+  content = content.replace(imageUrlPattern, (match, url) => {
+    // Clean URL (remove tracking parameters)
+    const cleanedUrl = cleanUrl(url);
+    // Don't escape brackets - AsciiDoc handles URLs properly
+    return `image::${cleanedUrl}[width=100%]`;
+  });
+  
+  // Match URLs that aren't already in markdown link format
+  // Pattern: http://, https://, wss://, or www. followed by valid URL characters
+  // Use word boundary to avoid matching URLs that are part of other text
+  // Don't match if immediately after colon-space (like "hyperlink: www.example.com")
+  const urlPattern = /(?<!\]\()(?<!:\s)\b(https?:\/\/[^\s<>"{}|\\^`\[\]()]+|wss:\/\/[^\s<>"{}|\\^`\[\]()]+|www\.[^\s<>"{}|\\^`\[\]()]+)/gi;
+  
+  content = content.replace(urlPattern, (match, url) => {
+    // Skip if this URL was already converted to an image
+    if (match.includes('image::')) {
+      return match;
+    }
+    
     // Ensure URL starts with http:// or https://
     let fullUrl = url;
     if (url.startsWith('www.')) {
       fullUrl = 'https://' + url;
+    } else if (url.startsWith('wss://')) {
+      // Convert wss:// to https:// for display
+      fullUrl = url.replace(/^wss:\/\//, 'https://');
     }
     
-    // Escape special AsciiDoc characters
-    const escapedUrl = fullUrl.replace(/([\[\]])/g, '\\$1');
-    return `link:${escapedUrl}[${url}]`;
+    // Clean URL (remove tracking parameters)
+    fullUrl = cleanUrl(fullUrl);
+    
+    // Don't escape brackets in URLs - AsciiDoc handles them properly
+    // The URL is in the link: part, brackets in URLs are valid
+    // Use proper AsciiDoc link syntax: link:url[text]
+    return `link:${fullUrl}[${url}]`;
   });
+  
+  // Restore inline code
+  inlineCodePlaceholders.forEach((code, index) => {
+    content = content.replace(`__INLINECODE_${index}__`, code);
+  });
+  
+  // Restore code blocks
+  codeBlockPlaceholders.forEach((code, index) => {
+    content = content.replace(`__CODEBLOCK_${index}__`, code);
+  });
+  
+  return content;
 }
 
 /**

@@ -16,6 +16,20 @@ export interface ParserOptions {
   enableMusicalNotation?: boolean;
   /** Enable nostr: address processing (default: true) */
   enableNostrAddresses?: boolean;
+  /** 
+   * Custom URL format for wikilinks. Can be:
+   * - A string template with {dtag} placeholder: "/d/{dtag}" or "/events?d={dtag}"
+   * - A function that takes dtag and returns URL: (dtag: string) => `/d/${dtag}`
+   * Default: "/events?d={dtag}"
+   */
+  wikilinkUrl?: string | ((dtag: string) => string);
+  /** 
+   * Custom URL format for hashtags. Can be:
+   * - A string template with {topic} placeholder: "/notes?t={topic}" or "/hashtag/{topic}"
+   * - A function that takes topic (hashtag without #) and returns URL: (topic: string) => `/notes?t=${topic}`
+   * Default: undefined (hashtags rendered as non-clickable spans)
+   */
+  hashtagUrl?: string | ((topic: string) => string);
 }
 
 /**
@@ -49,6 +63,8 @@ export interface ProcessResult {
   hasLaTeX: boolean;
   /** Indicates if musical notation was found */
   hasMusicalNotation: boolean;
+  /** Extracted YAML front matter (if present) */
+  frontmatter?: Record<string, any>;
   /** Extracted Nostr links */
   nostrLinks: NostrLink[];
   /** Extracted wikilinks */

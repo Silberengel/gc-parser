@@ -11,6 +11,8 @@ export interface ProcessOptions {
   enableMusicalNotation?: boolean;
   originalContent?: string; // Original content for LaTeX detection
   linkBaseURL?: string; // Base URL for link processing
+  wikilinkUrl?: string | ((dtag: string) => string); // Custom URL format for wikilinks
+  hashtagUrl?: string | ((topic: string) => string); // Custom URL format for hashtags
 }
 
 /**
@@ -54,6 +56,7 @@ export async function processAsciidoc(
         'toc-title': 'Table of Contents',
         'source-highlighter': enableCodeHighlighting ? 'highlight.js' : 'none',
         'stem': enableLaTeX ? 'latexmath' : 'none',
+        'plantuml': 'plantuml', // Enable PlantUML diagram support
         'data-uri': true,
         'imagesdir': '',
         'linkcss': false,
@@ -93,6 +96,8 @@ export async function processAsciidoc(
     const processed = postProcessHtml(sanitized, {
       enableMusicalNotation,
       linkBaseURL: options.linkBaseURL,
+      wikilinkUrl: options.wikilinkUrl,
+      hashtagUrl: options.hashtagUrl,
     });
     
     // Process links: add target="_blank" to external links
@@ -105,6 +110,8 @@ export async function processAsciidoc(
     const tocProcessed = postProcessHtml(tocSanitized, {
       enableMusicalNotation: false, // Don't process music in TOC
       linkBaseURL: options.linkBaseURL,
+      wikilinkUrl: options.wikilinkUrl,
+      hashtagUrl: options.hashtagUrl,
     });
     
     // Process links in TOC as well

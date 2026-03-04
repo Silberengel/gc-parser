@@ -105,6 +105,39 @@ export function extractTOC(html: string): { toc: string; contentWithoutTOC: stri
     contentWithoutTOC = html.substring(0, tocStartIdx) + html.substring(tocEndIdx);
   }
 
+  // Extract just the body content if the HTML includes full document structure
+  // AsciiDoctor might return full HTML with <html>, <head>, <body> tags
+  // Check if this is a full HTML document
+  const isFullDocument = /^\s*<!DOCTYPE|^\s*<html/i.test(contentWithoutTOC);
+  
+  if (isFullDocument) {
+    // Extract body content using a more robust approach
+    // Find the opening <body> tag
+    const bodyStartMatch = contentWithoutTOC.match(/<body[^>]*>/i);
+    if (bodyStartMatch && bodyStartMatch.index !== undefined) {
+      const bodyStart = bodyStartMatch.index + bodyStartMatch[0].length;
+      
+      // Find the closing </body> tag by searching backwards from the end
+      // This is more reliable than regex for nested content
+      const bodyEndMatch = contentWithoutTOC.lastIndexOf('</body>');
+      
+      if (bodyEndMatch !== -1 && bodyEndMatch > bodyStart) {
+        contentWithoutTOC = contentWithoutTOC.substring(bodyStart, bodyEndMatch).trim();
+      }
+    }
+  }
+
+  // Remove any remaining document structure tags that might have slipped through
+  contentWithoutTOC = contentWithoutTOC
+    .replace(/<html[^>]*>/gi, '')
+    .replace(/<\/html>/gi, '')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/<body[^>]*>/gi, '')
+    .replace(/<\/body>/gi, '');
+
+  // Clean up any extra whitespace
+  contentWithoutTOC = contentWithoutTOC.trim();
+
   return { toc: tocContent, contentWithoutTOC };
 }
 
