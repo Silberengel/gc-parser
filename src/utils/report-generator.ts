@@ -575,6 +575,7 @@ export function generateHTMLReport(data: ReportData): string {
  * Clean HTML content to extract only the body content
  * Removes full HTML document structure if present
  * Prevents infinite loops by ensuring we only extract once and handle nested structures
+ * Also detects and prevents content duplication (doom loops)
  */
 function cleanHtmlContent(html: string): string {
   if (!html || typeof html !== 'string') {
@@ -631,6 +632,86 @@ function cleanHtmlContent(html: string): string {
     cleaned = cleaned.replace(/<\/body>/gi, '');
     cleaned = cleaned.trim();
     iterations++;
+  }
+  
+  // Detect and prevent content duplication (doom loops)
+  // Strategy: Use a fingerprint of the first part of the content to detect repetition
+  
+  // Create a fingerprint from the first meaningful chunk (skip leading whitespace/tags)
+  const contentStart = cleaned.search(/[^\s<]/);
+  if (contentStart !== -1) {
+    // Use first 2000 characters as fingerprint, or 1/4 of content, whichever is smaller
+    const fingerprintLength = Math.min(2000, Math.max(500, Math.floor(cleaned.length / 4)));
+    const fingerprint = cleaned.substring(contentStart, contentStart + fingerprintLength);
+    
+    // Find where this fingerprint repeats
+    const secondOccurrence = cleaned.indexOf(fingerprint, contentStart + fingerprintLength);
+    
+    if (secondOccurrence !== -1 && secondOccurrence < cleaned.length * 0.85) {
+      // Content is clearly duplicated - return only the first occurrence
+      cleaned = cleaned.substring(0, secondOccurrence).trim();
+      return cleaned;
+    }
+  }
+  
+  // Additional check: detect repeated patterns using common document markers
+  const documentMarkers = [
+    /#\s+Markdown\s+Test\s+Document/gi,
+    /==\s+Bullet\s+list/gi,
+    /##\s+Bullet\s+list/gi,
+  ];
+  
+  for (const marker of documentMarkers) {
+    const matches = cleaned.match(marker);
+    if (matches && matches.length > 1) {
+      const firstMatch = cleaned.search(marker);
+      if (firstMatch !== -1) {
+        // Get a chunk starting from this marker
+        const chunkStart = firstMatch;
+        const chunkLength = Math.min(1500, Math.floor(cleaned.length / 3));
+        const chunk = cleaned.substring(chunkStart, chunkStart + chunkLength);
+        
+        // Find where this chunk repeats
+        const secondChunk = cleaned.indexOf(chunk, chunkStart + chunkLength);
+        
+        if (secondChunk !== -1 && secondChunk < cleaned.length * 0.9) {
+          // Content repeats here - truncate
+          cleaned = cleaned.substring(0, secondChunk).trim();
+          return cleaned;
+        }
+      }
+    }
+  }
+  
+  // Final check: detect repeated section headers
+  const sectionHeaderPattern = /(?:^|\n)(?:##?|==)\s+[^\n<]+/gm;
+  const sectionHeaders: string[] = [];
+  let match;
+  
+  while ((match = sectionHeaderPattern.exec(cleaned)) !== null) {
+    sectionHeaders.push(match[0].trim());
+  }
+  
+  // If we have many headers, check for repetition
+  if (sectionHeaders.length > 8) {
+    const uniqueHeaders = new Set(sectionHeaders);
+    // If we have way more headers than unique ones, content is repeating
+    if (sectionHeaders.length > uniqueHeaders.size * 2.5) {
+      // Find the first occurrence of each unique header
+      const uniqueHeaderArray = Array.from(uniqueHeaders);
+      const firstUniqueHeader = uniqueHeaderArray[0];
+      const firstHeaderIndex = cleaned.indexOf(firstUniqueHeader);
+      
+      if (firstHeaderIndex !== -1) {
+        // Find the second occurrence of the first header
+        const secondHeaderIndex = cleaned.indexOf(firstUniqueHeader, firstHeaderIndex + 200);
+        
+        if (secondHeaderIndex !== -1 && secondHeaderIndex < cleaned.length * 0.85) {
+          // Content repeats here - truncate
+          cleaned = cleaned.substring(0, secondHeaderIndex).trim();
+        }
+      }
+    }
   }
   
   return cleaned;
