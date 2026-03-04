@@ -340,7 +340,7 @@ export function generateHTMLReport(data: ReportData): string {
       <div id="md-rendered" class="tab-content">
         <h3>Rendered HTML Output</h3>
         <div class="rendered-output">
-          ${markdown.result.content}
+          ${cleanHtmlContent(markdown.result.content)}
         </div>
         <details style="margin-top: 15px;">
           <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML</summary>
@@ -476,7 +476,7 @@ export function generateHTMLReport(data: ReportData): string {
       <div id="ad-rendered" class="tab-content">
         <h3>Rendered HTML Output</h3>
         <div class="rendered-output">
-          ${asciidoc.result.content}
+          ${cleanHtmlContent(asciidoc.result.content)}
         </div>
         <details style="margin-top: 15px;">
           <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML</summary>
@@ -569,6 +569,71 @@ export function generateHTMLReport(data: ReportData): string {
   </script>
 </body>
 </html>`;
+}
+
+/**
+ * Clean HTML content to extract only the body content
+ * Removes full HTML document structure if present
+ * Prevents infinite loops by ensuring we only extract once and handle nested structures
+ */
+function cleanHtmlContent(html: string): string {
+  if (!html || typeof html !== 'string') {
+    return '';
+  }
+  
+  let cleaned = html.trim();
+  
+  // Count occurrences to detect nested structures
+  const htmlTagCount = (cleaned.match(/<html[^>]*>/gi) || []).length;
+  const bodyTagCount = (cleaned.match(/<body[^>]*>/gi) || []).length;
+  const bodyCloseCount = (cleaned.match(/<\/body>/gi) || []).length;
+  
+  // If we have multiple body tags, there might be nested structures
+  // Extract only the outermost body content
+  if (bodyTagCount > 0 && bodyCloseCount > 0) {
+    // Find the first <body> tag
+    const firstBodyIndex = cleaned.indexOf('<body');
+    if (firstBodyIndex !== -1) {
+      // Find the opening > of the first body tag
+      const bodyTagEnd = cleaned.indexOf('>', firstBodyIndex);
+      if (bodyTagEnd !== -1) {
+        const bodyStart = bodyTagEnd + 1;
+        // Find the last </body> tag (to handle nested structures)
+        const bodyEnd = cleaned.lastIndexOf('</body>');
+        
+        if (bodyEnd > bodyStart) {
+          cleaned = cleaned.substring(bodyStart, bodyEnd).trim();
+          
+          // Recursively clean if there are still nested structures
+          // But limit recursion to prevent infinite loops
+          const remainingBodyTags = (cleaned.match(/<body[^>]*>/gi) || []).length;
+          if (remainingBodyTags > 0 && remainingBodyTags < bodyTagCount) {
+            // There are still nested body tags, clean again but only once more
+            cleaned = cleaned.replace(/<body[^>]*>/gi, '');
+            cleaned = cleaned.replace(/<\/body>/gi, '');
+          }
+        }
+      }
+    }
+  }
+  
+  // Remove any remaining DOCTYPE, html, head, or body tags that might be left
+  // Do this in a way that doesn't create nested matches
+  let previousLength = 0;
+  let iterations = 0;
+  while (iterations < 10 && cleaned.length !== previousLength) {
+    previousLength = cleaned.length;
+    cleaned = cleaned.replace(/<!DOCTYPE[^>]*>/gi, '');
+    cleaned = cleaned.replace(/<html[^>]*>/gi, '');
+    cleaned = cleaned.replace(/<\/html>/gi, '');
+    cleaned = cleaned.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
+    cleaned = cleaned.replace(/<body[^>]*>/gi, '');
+    cleaned = cleaned.replace(/<\/body>/gi, '');
+    cleaned = cleaned.trim();
+    iterations++;
+  }
+  
+  return cleaned;
 }
 
 /**

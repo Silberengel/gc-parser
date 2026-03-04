@@ -264,5 +264,123 @@ describe('Parser Test Report', () => {
     if (markdownResult.hasMusicalNotation) {
       expect(htmlReport).toMatch(/<div class="number">Yes<\/div>.*Has Music/i);
     }
+
+    // ============================================
+    // Test for Content Repetition (Doom Loop Fix)
+    // ============================================
+    // Extract rendered output sections from the HTML report
+    const renderedOutputRegex = /<div class="rendered-output">([\s\S]*?)<\/div>/gi;
+    const renderedOutputs: string[] = [];
+    let match;
+    while ((match = renderedOutputRegex.exec(htmlReport)) !== null) {
+      renderedOutputs.push(match[1]);
+    }
+
+    // Test that we have rendered output sections
+    expect(renderedOutputs.length).toBeGreaterThan(0);
+
+    // Test each rendered output section for content repetition
+    renderedOutputs.forEach((output, index) => {
+      // Check for specific content that should only appear once
+      const testPhrases = [
+        '# Markdown Test Document',
+        '## Bullet list',
+        'This is a test unordered list with mixed bullets:',
+        '## Headers',
+        '## Media and Links',
+        '### Nostr address',
+        '## Tables',
+        '## Code blocks',
+        '## LateX',
+      ];
+
+      testPhrases.forEach(phrase => {
+        // Count occurrences of the phrase in this output section
+        const occurrences = (output.match(new RegExp(escapeRegex(phrase), 'gi')) || []).length;
+        
+        // Each phrase should appear at most once (or a few times if it's in different contexts)
+        // But if it appears many times, that indicates a repetition loop
+        if (occurrences > 5) {
+          throw new Error(
+            `Content repetition detected in rendered output section ${index + 1}: ` +
+            `"${phrase}" appears ${occurrences} times (expected ≤5). ` +
+            `This indicates a doom-loop in content generation.`
+          );
+        }
+      });
+
+      // Check for duplicate document structure
+      // If the entire document structure repeats, we'll see multiple instances of key sections
+      const sectionHeaders = output.match(/##\s+[^\n]+/g) || [];
+      const uniqueHeaders = new Set(sectionHeaders.map(h => h.trim()));
+      
+      // If we have many more headers than unique ones, content is repeating
+      if (sectionHeaders.length > uniqueHeaders.size * 2) {
+        throw new Error(
+          `Content repetition detected in rendered output section ${index + 1}: ` +
+          `Found ${sectionHeaders.length} section headers but only ${uniqueHeaders.size} unique ones. ` +
+          `This indicates the entire document is repeating.`
+        );
+      }
+
+      // Check for repeated code block placeholders (should only appear once per code block)
+      const codeBlockPlaceholders: string[] = (output.match(/__CODEBLOCK_\d+__/g) || []);
+      const uniquePlaceholders = new Set(codeBlockPlaceholders);
+      
+      // Each placeholder should appear only once
+      if (codeBlockPlaceholders.length !== uniquePlaceholders.size) {
+        const duplicates = codeBlockPlaceholders.filter((p, i) => codeBlockPlaceholders.indexOf(p) !== i);
+        throw new Error(
+          `Content repetition detected in rendered output section ${index + 1}: ` +
+          `Found duplicate code block placeholders: ${Array.from(new Set(duplicates)).join(', ')}. ` +
+          `Each placeholder should appear only once.`
+        );
+      }
+
+      // Check overall content length - if it's unreasonably long, content might be repeating
+      // A typical test document should be under 50KB in the rendered output
+      if (output.length > 100000) {
+        console.warn(
+          `⚠️  Rendered output section ${index + 1} is very long (${output.length} chars). ` +
+          `This might indicate content repetition.`
+        );
+      }
+    });
+
+    // Test that the markdown content appears only once in the markdown rendered section
+    const markdownRenderedMatch = htmlReport.match(
+      /<div id="md-rendered"[\s\S]*?<div class="rendered-output">([\s\S]*?)<\/div>/
+    );
+    if (markdownRenderedMatch) {
+      const markdownRendered = markdownRenderedMatch[1];
+      // Count how many times the document title appears
+      const titleCount = (markdownRendered.match(/# Markdown Test Document/gi) || []).length;
+      expect(titleCount).toBeLessThanOrEqual(1);
+      
+      // Count how many times a unique section appears
+      const uniqueSection = 'Ordered list that is wrongly numbered:';
+      const uniqueSectionCount = (markdownRendered.match(new RegExp(escapeRegex(uniqueSection), 'gi')) || []).length;
+      expect(uniqueSectionCount).toBeLessThanOrEqual(1);
+    }
+
+    // Test that the asciidoc content appears only once in the asciidoc rendered section
+    const asciidocRenderedMatch = htmlReport.match(
+      /<div id="ad-rendered"[\s\S]*?<div class="rendered-output">([\s\S]*?)<\/div>/
+    );
+    if (asciidocRenderedMatch) {
+      const asciidocRendered = asciidocRenderedMatch[1];
+      // Count how many times the document title appears
+      const titleCount = (asciidocRendered.match(/== Bullet list/gi) || []).length;
+      expect(titleCount).toBeLessThanOrEqual(1);
+    }
+
+    console.log('✅ Content repetition check passed - no doom-loop detected');
   });
 });
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
