@@ -318,10 +318,6 @@ stop
 
 `$[ x^n + y^n = z^n \]$` and `$[\sqrt{x^2+1}\]$` and `$\color{blue}{X \sim Normal \; (\mu,\sigma^2)}$`
 
-== LaTeX outside of code
-
-This is a latex code block $$\mathbb{N} = \{ a \in \mathbb{Z} : a > 0 \}$$ and another that is an inline latex $\color{green}{X \sim Normal \; (\mu,\sigma^2)}$ and should be green
-
 == Footnotes
 
 Here's a simple footnote,footnote:[This is the first footnote.] and here's a longer one.footnote:[Here's one with multiple paragraphs and code.]

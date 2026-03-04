@@ -208,7 +208,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
   const youtubeVideoTagRegex = /<video[^>]+src="(https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]+))"[^>]*>[\s\S]*?<\/video>/gi;
   processed = processed.replace(youtubeVideoTagRegex, (match, url, videoId) => {
     const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-    return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+    return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
   });
 
   // 2. SECOND: Process YouTube links in <a> tags
@@ -217,7 +217,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
   processed = processed.replace(youtubeLinkRegex, (match, url, videoId) => {
     if (isInCodeBlock(processed.indexOf(match))) return match;
     const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-    return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+    return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
   });
 
   // 3. THIRD: Fix malformed YouTube iframes from AsciiDoc video:: macro
@@ -226,7 +226,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
   const malformedYoutubeIframeRegex = /<iframe[^>]+src="[^"]*youtube[^"]*(?:watch\?v=|shorts\/)([a-zA-Z0-9_-]+)[^"]*"[^>]*(?:\/>|>[\s\S]*?<\/iframe>)/gi;
   processed = processed.replace(malformedYoutubeIframeRegex, (match, videoId) => {
     const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-    return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+    return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
   });
   
   // 3.5: Fix YouTube iframes with embed URLs but wrong parameters or missing required attributes
@@ -243,7 +243,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
     }
     // Fix the iframe with proper attributes
     const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-    return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+    return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
   });
   
   // 4. FOURTH: Fix any existing YouTube iframes that have malformed embed URLs (AsciiDoc sometimes creates broken embed URLs)
@@ -251,7 +251,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
   const brokenYoutubeIframeRegex = /<iframe[^>]+src="[^"]*youtube\.com\/embed\/[^"]*watch\?v=([a-zA-Z0-9_-]+)[^"]*"[^>]*(?:\/>|>[\s\S]*?<\/iframe>)/gi;
   processed = processed.replace(brokenYoutubeIframeRegex, (match, videoId) => {
     const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-    return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+    return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
   });
 
   // 5. LAST: Handle bare YouTube URLs (not in links, video tags, or iframes)
@@ -345,7 +345,7 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
     if (youtubeMatch) {
       const videoId = youtubeMatch[1];
       const embedUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-      return `<iframe class="youtube-embed" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
+      return `<iframe class="youtube-embed" frameborder="0" allow="encrypted-media; fullscreen; picture-in-picture; web-share" referrerpolicy='strict-origin-when-cross-origin' width="100%" height="360" src="${escapeHtml(embedUrl)}"></iframe>`;
     }
     
     // Check Spotify URLs (be very specific - must be open.spotify.com)
