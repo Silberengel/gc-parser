@@ -70,6 +70,57 @@ function postProcessHtml(html, options = {}) {
         const escapedUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         return `<a class="wikilink text-primary-600 dark:text-primary-500 hover:underline" data-dtag="${escapedDtag}" data-url="${escapedUrl}" href="${escapedUrl}">${escapedDisplay}</a>`;
     });
+    // Convert any leftover link: macros that AsciiDoctor didn't convert
+    // This MUST run before processOpenGraphLinks which removes "link:" prefixes
+    // This handles cases where AsciiDoctor couldn't parse the link (e.g., link text with special chars)
+    // Pattern: link:url[text] where url is http/https and text can contain any characters
+    // Match link: macros that are still in the HTML as plain text (not converted by AsciiDoctor)
+    // Also handle HTML-escaped versions that might appear
+    processed = processed.replace(/link:(https?:\/\/[^\[]+)\[([^\]]+)\]/g, (_match, url, text) => {
+        // Unescape if already HTML-escaped (but be careful not to unescape actual content)
+        let unescapedUrl = url;
+        // Only unescape if it looks like it was escaped (contains &amp; or &quot;)
+        if (url.includes('&amp;') || url.includes('&quot;') || url.includes('&#39;')) {
+            unescapedUrl = url
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'");
+        }
+        let unescapedText = text;
+        // Only unescape if it looks like it was escaped
+        if (text.includes('&amp;') || text.includes('&lt;') || text.includes('&gt;') || text.includes('&quot;') || text.includes('&#39;')) {
+            unescapedText = text
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'");
+        }
+        // Escape URL for HTML attribute (fresh escape, no double-escaping)
+        const escapedUrl = unescapedUrl
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        // Escape text content for HTML (fresh escape, no double-escaping)
+        const escapedText = unescapedText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        // Check if link text contains wss:// or ws:// - these are relay URLs, don't add OpenGraph
+        const isRelayUrl = /wss?:\/\//i.test(unescapedText);
+        if (isRelayUrl) {
+            // Simple link without OpenGraph wrapper
+            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
+        }
+        else {
+            // Regular link - will be processed by OpenGraph handler if external
+            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
+        }
+    });
     // Convert nostr: links to HTML
     processed = processed.replace(/link:nostr:([^[]+)\[([^\]]+)\]/g, (_match, bech32Id, displayText) => {
         const nostrType = getNostrType(bech32Id);
@@ -89,31 +140,14 @@ function postProcessHtml(html, options = {}) {
             return `<a href="nostr:${bech32Id}" class="nostr-link text-blue-600 hover:text-blue-800 hover:underline" data-nostr-type="${nostrType || 'unknown'}" data-bech32="${escaped}">${displayText}</a>`;
         }
     });
-    // Convert any leftover link: macros that AsciiDoctor didn't convert
-    // This handles cases where AsciiDoctor couldn't parse the link (e.g., link text with special chars)
-    // Pattern: link:url[text] where url is http/https and text can contain any characters
-    processed = processed.replace(/link:(https?:\/\/[^\[]+)\[([^\]]+)\]/g, (_match, url, text) => {
-        // Escape URL and text for HTML attributes
-        const escapedUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-        const escapedText = text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-        // Check if link text contains wss:// or ws:// - these are relay URLs, don't add OpenGraph
-        const isRelayUrl = /wss?:\/\//i.test(text);
-        if (isRelayUrl) {
-            // Simple link without OpenGraph wrapper
-            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
-        }
-        else {
-            // Regular link - will be processed by OpenGraph handler if external
-            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
-        }
-    });
     // Process media URLs (YouTube, Spotify, video, audio)
     processed = processMedia(processed);
+    // Fix double-escaped quotes in href attributes FIRST (before any other processing)
+    // This fixes href="&quot;url&quot;" -> href="url"
+    processed = processed.replace(/href\s*=\s*["']&quot;(https?:\/\/[^"']+)&quot;["']/gi, (_match, url) => {
+        const escapedUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return `href="${escapedUrl}"`;
+    });
     // Process OpenGraph links (external links that should have rich previews)
     processed = processOpenGraphLinks(processed, options.linkBaseURL);
     // Process images: add max-width styling and data attributes
@@ -122,6 +156,41 @@ function postProcessHtml(html, options = {}) {
     if (options.enableMusicalNotation) {
         processed = (0, music_1.processMusicalNotation)(processed);
     }
+    // Clean up any escaped HTML that appears as text (e.g., &lt;a href=...&gt;)
+    // This can happen when AsciiDoctor escapes link macros that it couldn't parse
+    // Pattern: &lt;a href="url"&gt;text&lt;/a&gt; should be converted to actual HTML
+    // Use a more flexible pattern that handles text with special characters like ://
+    // Fix regular escaped HTML links
+    processed = processed.replace(/&lt;a\s+href=["'](https?:\/\/[^"']+)["']\s*&gt;([^<]+)&lt;\/a&gt;/gi, (_match, url, text) => {
+        // Unescape the URL and text
+        const unescapedUrl = url
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+        const unescapedText = text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>');
+        // Re-escape properly for HTML
+        const escapedUrl = unescapedUrl
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        const escapedText = unescapedText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        // Check if link text contains wss:// or ws:// - these are relay URLs
+        const isRelayUrl = /wss?:\/\//i.test(unescapedText);
+        if (isRelayUrl) {
+            // Simple link without OpenGraph wrapper
+            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
+        }
+        else {
+            // Regular link
+            return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
+        }
+    });
     // Clean up any leftover markdown syntax
     processed = cleanupMarkdown(processed);
     // Add styling classes
@@ -241,12 +310,20 @@ function processOpenGraphLinks(html, linkBaseURL) {
     processed = processed.replace(/([^"'>\s])link:([a-zA-Z0-9])/gi, '$1$2');
     // Also handle cases where "link:" appears with whitespace before anchor tags
     processed = processed.replace(/\s+link:\s*(?=<a\s+href)/gi, ' ');
-    // Clean up any corrupted href attributes that contain HTML fragments
+    // Clean up any corrupted href attributes that contain HTML fragments or double-escaped quotes
+    // Fix href attributes with escaped quotes: href="&quot;url&quot;" -> href="url"
+    processed = processed.replace(/href\s*=\s*["']&quot;(https?:\/\/[^"']+)&quot;["']/gi, (match, url) => {
+        // Extract the clean URL and properly escape it
+        const escapedUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return `href="${escapedUrl}"`;
+    });
+    // Clean up href attributes that contain HTML fragments
     processed = processed.replace(/href\s*=\s*["']([^"']*<[^"']*)["']/gi, (match, corruptedHref) => {
         // If href contains HTML tags, extract just the URL part
         const urlMatch = corruptedHref.match(/(https?:\/\/[^\s<>"']+)/i);
         if (urlMatch) {
-            return `href="${urlMatch[1]}"`;
+            const escapedUrl = urlMatch[1].replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            return `href="${escapedUrl}"`;
         }
         return match; // If we can't fix it, leave it (will be skipped by validation)
     });
@@ -552,17 +629,39 @@ function cleanupMarkdown(html) {
         return `<img src="${escapedUrl}" alt="${altText}" class="max-w-[400px] object-contain my-0" />`;
     });
     // Clean up markdown link syntax
+    // Skip if the link is already inside an HTML tag or is part of escaped HTML
     cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, url) => {
-        if (cleaned.includes(`href="${url}"`)) {
+        // Skip if this markdown link is already inside an HTML tag
+        // Check if there's an <a> tag nearby that might have been created from this
+        if (cleaned.includes(`href="${url}"`) || cleaned.includes(`href='${url}'`)) {
+            return _match;
+        }
+        // Skip if the text contains HTML entities or looks like it's already processed
+        if (text.includes('&lt;') || text.includes('&gt;') || text.includes('&amp;')) {
+            return _match;
+        }
+        // Skip if the URL is already in an href attribute (check for escaped versions too)
+        const escapedUrl = url.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        if (cleaned.includes(`href="${escapedUrl}"`) || cleaned.includes(`href='${escapedUrl}'`)) {
             return _match;
         }
         // Clean URL (remove tracking parameters)
         const cleanedUrl = cleanUrl(url);
-        // Escape for HTML attribute
-        const escapedUrl = cleanedUrl.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-        // Escape text for HTML
-        const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
+        // Escape for HTML attribute (but don't double-escape)
+        const finalEscapedUrl = cleanedUrl
+            .replace(/&amp;/g, '&') // Unescape if already escaped
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        // Escape text for HTML (but don't double-escape)
+        const escapedText = text
+            .replace(/&amp;/g, '&') // Unescape if already escaped
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        return `<a href="${finalEscapedUrl}" target="_blank" rel="noreferrer noopener" class="break-words inline-flex items-baseline gap-1">${escapedText} <svg style="width: 0.75rem; height: 0.75rem; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>`;
     });
     return cleaned;
 }

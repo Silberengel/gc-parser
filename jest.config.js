@@ -8,18 +8,15 @@ module.exports = {
     'src/**/*.ts',
     '!src/**/*.d.ts',
   ],
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        target: 'ES2020',
-        module: 'commonjs',
-        lib: ['ES2020'],
-        types: ['node'],
-        strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
-      },
-    },
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: 'tsconfig.test.json',
+    }],
   },
+  // Don't transform AsciiDoctor packages - they use Opal runtime which breaks with Jest transformation
+  // AsciiDoctor uses CommonJS and Opal runtime, so we need to exclude it from transformation
+  // The pattern matches paths to ignore (not transform)
+  transformIgnorePatterns: [
+    '/node_modules/@asciidoctor/',
+  ],
 };
