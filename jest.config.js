@@ -17,6 +17,8 @@ module.exports = {
   // AsciiDoctor uses CommonJS and Opal runtime, so we need to exclude it from transformation
   // The pattern matches paths to ignore (not transform)
   transformIgnorePatterns: [
-    '/node_modules/@asciidoctor/',
+    'node_modules/(?!(@asciidoctor)/)',
   ],
+  // Ensure CommonJS modules are handled correctly
+  moduleNameMapper: {},
 };

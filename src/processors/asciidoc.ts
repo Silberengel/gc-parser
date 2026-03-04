@@ -3,12 +3,14 @@ import { extractTOC, sanitizeHTML, processLinks } from './html-utils';
 import { postProcessHtml } from './html-postprocess';
 
 // Lazy-load AsciiDoctor instance to avoid issues with Jest module transformation
-// Use dynamic import to prevent Jest from trying to transform the Opal runtime
+// Use require() for CommonJS modules to avoid Jest transformation issues
 let asciidoctorInstance: any = null;
 
-async function getAsciidoctorInstance() {
+function getAsciidoctorInstance() {
   if (!asciidoctorInstance) {
-    const asciidoctor = await import('@asciidoctor/core');
+    // Use require() instead of import() to avoid Jest transformation issues with Opal runtime
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const asciidoctor = require('@asciidoctor/core');
     asciidoctorInstance = asciidoctor.default();
   }
   return asciidoctorInstance;
@@ -52,7 +54,7 @@ export async function processAsciidoc(
   }
 
   try {
-    const instance = await getAsciidoctorInstance();
+    const instance = getAsciidoctorInstance();
     const result = instance.convert(content, {
       safe: 'safe',
       backend: 'html5',
