@@ -364,13 +364,13 @@ X^2^
 
 === Delimiter
 
-based upon a -
+based upon a single quote
 
 '''
 
-based upon a *
+based upon a dashes
 
-'''
+---
 
 === Quotes
 

@@ -120,7 +120,8 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
     });
 
     // Process hashtags: #hashtag (but not in code blocks or inside HTML tags)
-    const hashtagRegex = /(^|\s|>)(#[\w-]+)/g;
+    // Match hashtag at start of string, after whitespace, after >, or immediately after opening tags
+    const hashtagRegex = /(#[\w-]+)/g;
     const hashtagReplacements: Array<{ match: string; replacement: string; index: number }> = [];
     
     while ((match = hashtagRegex.exec(processed)) !== null) {
@@ -139,9 +140,30 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
       const lastSpanClose = beforeMatch.lastIndexOf('</span>');
       if (lastLinkOpen > lastLinkClose || lastSpanOpen > lastSpanClose) continue;
       
-      const hashtag = match[2];
-      const prefix = match[1];
+      // Check what's before the hashtag
+      const charBefore = match.index > 0 ? processed[match.index - 1] : '';
+      const beforeHashtag = processed.substring(Math.max(0, match.index - 100), match.index);
+      const lastTagClose = beforeHashtag.lastIndexOf('>');
+      const textAfterTag = beforeHashtag.substring(lastTagClose + 1);
+      
+      // Hashtag is valid if:
+      // 1. At start of string
+      // 2. Preceded by whitespace
+      // 3. Preceded by >
+      // 4. Immediately after opening tag (like <p>#hashtag)
+      const isValidPosition = 
+        match.index === 0 ||
+        /\s/.test(charBefore) ||
+        charBefore === '>' ||
+        (lastTagClose >= 0 && /^[\s\n]*$/.test(textAfterTag));
+      
+      if (!isValidPosition) continue;
+      
+      const hashtag = match[1];
       const topic = hashtag.substring(1);
+      const prefix = (match.index === 0 || charBefore === '>' || (lastTagClose >= 0 && /^[\s\n]*$/.test(textAfterTag))) 
+        ? '' 
+        : charBefore;
       
       if (!hashtags.includes(topic)) {
         hashtags.push(topic);
@@ -444,6 +466,65 @@ export function postProcess(html: string, options: ParserOptions, skipWikilinksA
   // Apply media replacements in reverse order
   mediaReplacements.reverse().forEach(({ match, replacement, index }) => {
     processed = processed.substring(0, index) + replacement + processed.substring(index + match.length);
+  });
+
+  // Process markdown table alignment
+  // Marked generates tables with align attributes or style attributes, we need to add CSS classes for styling
+  // Match tables and process alignment on th/td elements
+  const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+  processed = processed.replace(tableRegex, (tableMatch: string, tableContent: string) => {
+    // Process each row
+    let processedTable = tableContent;
+    
+    // Find all th and td elements - check for align attribute or style with text-align
+    const cellRegex = /<(th|td)([^>]*)>([\s\S]*?)<\/\1>/gi;
+    processedTable = processedTable.replace(cellRegex, (cellMatch: string, tag: string, attrs: string, content: string) => {
+      let align: string | null = null;
+      let newAttrs = attrs;
+      
+      // Check for align attribute
+      const alignMatch = attrs.match(/align=["'](left|center|right)["']/i);
+      if (alignMatch) {
+        align = alignMatch[1].toLowerCase();
+        newAttrs = newAttrs.replace(/\s*align=["'](left|center|right)["']/i, '');
+      } else {
+        // Check for style attribute with text-align
+        const styleMatch = attrs.match(/style=["']([^"']*text-align:\s*(left|center|right)[^"']*)["']/i);
+        if (styleMatch) {
+          align = styleMatch[2].toLowerCase();
+          // Remove text-align from style
+          const styleContent = styleMatch[1].replace(/text-align:\s*(left|center|right);?/gi, '').trim();
+          if (styleContent) {
+            newAttrs = newAttrs.replace(/style=["'][^"']+["']/, `style="${styleContent}"`);
+          } else {
+            newAttrs = newAttrs.replace(/\s*style=["'][^"']+["']/, '');
+          }
+        }
+      }
+      
+      // If we found alignment, add CSS class
+      if (align) {
+        const alignClass = align === 'left' ? 'halign-left' : 
+                          align === 'center' ? 'halign-center' : 'halign-right';
+        
+        // If there's already a class attribute, merge them
+        if (newAttrs.includes('class=')) {
+          const classMatch = newAttrs.match(/class=["']([^"']+)["']/);
+          if (classMatch) {
+            const existingClass = classMatch[1];
+            if (!existingClass.includes(alignClass)) {
+              newAttrs = newAttrs.replace(/class=["'][^"']+["']/, `class="${existingClass} ${alignClass}"`);
+            }
+          }
+        } else {
+          newAttrs = `${newAttrs} class="${alignClass}"`.trim();
+        }
+      }
+      
+      return `<${tag}${newAttrs}>${content}</${tag}>`;
+    });
+    
+    return `<table>${processedTable}</table>`;
   });
 
   return {

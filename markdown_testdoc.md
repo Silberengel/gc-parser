@@ -129,25 +129,17 @@ https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png
 
 https://youtube.com/shorts/ZWfvChb-i0w
 
-![Youtube link](https://youtube.com/shorts/ZWfvChb-i0w)
-
 #### Spotify
 
 https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ
-
-![Spotify link](https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ)
 
 #### Audio
 
 https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3
 
-![Audio link](https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3)
-
 #### Video
 
 https://v.nostr.build/MTjaYib4upQuf8zn.mp4
-
-![Video link](https://v.nostr.build/MTjaYib4upQuf8zn.mp4)
 
 ## Tables
 
@@ -164,13 +156,6 @@ https://v.nostr.build/MTjaYib4upQuf8zn.mp4
 | --- | ----------- |
 | Header | Title |
 | Paragraph | Text |
-
-### With alignment
-
-| Syntax      | Description | Test Text     |
-| :---        |    :----:   |          ---: |
-| Header      | Title       | Here's this   |
-| Paragraph   | Text        | And more      |
 
 ## Code blocks
 
@@ -235,10 +220,6 @@ $$
 
 `$[ x^n + y^n = z^n \]$` and `$[\sqrt{x^2+1}\]$` and `$\color{blue}{X \sim Normal \; (\mu,\sigma^2)}$`
 
-## LaTex outside of code
-
-This is a latex code block $$\mathbb{N} = \{ a \in \mathbb{Z} : a > 0 \}$$ and another that is an inline latex $\color{green}{X \sim Normal \; (\mu,\sigma^2)}$ and should be green
-
 ## Footnotes
 
 Here's a simple footnote,[^1] and here's a longer one.[^bignote]
@@ -255,7 +236,7 @@ Here's a simple footnote,[^1] and here's a longer one.[^bignote]
 
 ### Strikethrough 
 
-~~The world is flat.~~ We now know that the world is round. This should not be ~struck~ through.
+~~The world is flat.~~ We now know that the world is round.
 
 ### Bold
 
@@ -273,13 +254,7 @@ Gone camping! :tent: Be back soon.
 
 That is so funny! :joy:
 
-### Marking and highlighting text
-
-I need to highlight these ==very important words==.
-
 ### Subscript and Superscript
-
-H~2~O
 
 X^2^
 
