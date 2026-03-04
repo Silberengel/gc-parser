@@ -343,7 +343,7 @@ export function generateHTMLReport(data: ReportData): string {
           ${cleanHtmlContent(markdown.result.content)}
         </div>
         <details style="margin-top: 15px;">
-          <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML</summary>
+          <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML (Final Processed State)</summary>
           <div class="code-block" style="margin-top: 10px;">
             <pre>${escapeHtml(markdown.result.content)}</pre>
           </div>
@@ -479,7 +479,7 @@ export function generateHTMLReport(data: ReportData): string {
           ${cleanHtmlContent(asciidoc.result.content)}
         </div>
         <details style="margin-top: 15px;">
-          <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML</summary>
+          <summary style="cursor: pointer; color: #3498db; font-weight: 500;">View Raw HTML (Final Processed State)</summary>
           <div class="code-block" style="margin-top: 10px;">
             <pre>${escapeHtml(asciidoc.result.content)}</pre>
           </div>

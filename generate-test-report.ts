@@ -1,5 +1,7 @@
+// Import from source files - this script should be run with ts-node or similar
+// from the project root, not from dist/
 import { Parser } from './src/parser';
-import { generateHTMLReport, ReportData } from './src/utils/report-generator';
+import { generateHTMLReport } from './src/utils/report-generator';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -18,9 +20,10 @@ async function main() {
     hashtagUrl: '/notes?t={topic}',
   });
 
-  // Read test documents
-  const markdownPath = path.join(__dirname, 'markdown_testdoc.md');
-  const asciidocPath = path.join(__dirname, 'asciidoc_testdoc.adoc');
+  // Read test documents from project root
+  const baseDir = __dirname.includes('dist') ? path.join(__dirname, '..') : __dirname;
+  const markdownPath = path.join(baseDir, 'markdown_testdoc.md');
+  const asciidocPath = path.join(baseDir, 'asciidoc_testdoc.adoc');
 
   if (!fs.existsSync(markdownPath)) {
     console.error(`❌ Error: ${markdownPath} not found`);
@@ -53,8 +56,8 @@ async function main() {
     },
   });
 
-  // Write HTML report to file
-  const reportPath = path.join(__dirname, 'test-report.html');
+  // Write HTML report to file (adjust path based on where script is run from)
+  const reportPath = path.join(baseDir, 'test-report.html');
   fs.writeFileSync(reportPath, htmlReport, 'utf-8');
 
   console.log(`\n✅ Test report generated: ${reportPath}`);
