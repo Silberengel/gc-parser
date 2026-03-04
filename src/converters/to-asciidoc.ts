@@ -50,9 +50,19 @@ export function convertToAsciidoc(
     asciidoc = processNostrAddresses(asciidoc, linkBaseURL);
   }
   
-  // Process hashtags
+  // Process media URLs in markdown links/images first (before converting to AsciiDoc)
+  // This ensures media URLs in [text](url) or ![alt](url) format are detected
+  asciidoc = processMediaUrlsInMarkdown(asciidoc);
+  
+  // Process media URLs (YouTube, Spotify, video, audio files) - for bare URLs
+  asciidoc = processMediaUrls(asciidoc);
+  
+  // Process bare URLs (convert to AsciiDoc links)
+  asciidoc = processBareUrls(asciidoc);
+  
+  // Process hashtags (after URLs to avoid conflicts)
   asciidoc = processHashtags(asciidoc);
-
+  
   return asciidoc;
 }
 
@@ -107,13 +117,16 @@ function convertWikipediaToAsciidoc(content: string): string {
 function convertMarkdownToAsciidoc(content: string): string {
   let asciidoc = content.replace(/\\n/g, '\n');
   
-  // Fix spacing issues
+  // Fix spacing issues (but be careful not to break links and images)
+  // Process these BEFORE converting links/images to avoid conflicts
   asciidoc = asciidoc.replace(/`([^`\n]+)`\s*\(([^)]+)\)/g, '`$1` ($2)');
   asciidoc = asciidoc.replace(/([a-zA-Z0-9])`([^`\n]+)`([a-zA-Z0-9])/g, '$1 `$2` $3');
   asciidoc = asciidoc.replace(/([a-zA-Z0-9])`([^`\n]+)`\s*\(/g, '$1 `$2` (');
   asciidoc = asciidoc.replace(/\)`([^`\n]+)`([a-zA-Z0-9])/g, ') `$1` $2');
   asciidoc = asciidoc.replace(/([a-zA-Z0-9])\)([a-zA-Z0-9])/g, '$1) $2');
-  asciidoc = asciidoc.replace(/([a-zA-Z0-9])==/g, '$1 ==');
+  // Add space before == but not if it's part of a markdown link pattern
+  // Check that == is not immediately after ]( which would be a link
+  asciidoc = asciidoc.replace(/([a-zA-Z0-9])(?<!\]\()==/g, '$1 ==');
 
   // Note: nostr: addresses are processed later in processNostrAddresses
 
@@ -155,12 +168,41 @@ function convertMarkdownToAsciidoc(content: string): string {
   asciidoc = asciidoc.replace(/`([^`]+)`/g, '`$1`'); // Inline code
   asciidoc = asciidoc.replace(/`\$([^$]+)\$`/g, '`$\\$1\\$$`'); // Preserve LaTeX in code
 
-  // Convert images
-  asciidoc = asciidoc.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, 'image::$2[$1,width=100%]');
-  asciidoc = asciidoc.replace(/image::([^\[]+)\[([^\]]+),width=100%\]/g, 'image::$1[$2,width=100%]');
+  // Convert images first (before links, since images are links with ! prefix)
+  // Match: ![alt text](url) or ![](url) - handle empty alt text
+  // Use non-greedy matching to stop at first closing paren
+  asciidoc = asciidoc.replace(/!\[([^\]]*)\]\(([^)]+?)\)/g, (match, alt, url) => {
+    const cleanUrl = url.trim();
+    const cleanAlt = alt.trim();
+    
+    // Check if it's already a MEDIA: placeholder (processed by processMediaUrlsInMarkdown)
+    if (cleanUrl.startsWith('MEDIA:')) {
+      return cleanUrl; // Return the placeholder as-is
+    }
+    
+    // Regular image - escape special characters in URL for AsciiDoc
+    const escapedUrl = cleanUrl.replace(/([\[\]])/g, '\\$1');
+    return `image::${escapedUrl}[${cleanAlt ? cleanAlt + ', ' : ''}width=100%]`;
+  });
 
-  // Convert links
-  asciidoc = asciidoc.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 'link:$2[$1]');
+  // Convert links (but not images, which we already processed)
+  // Match: [text](url) - use negative lookbehind to avoid matching images
+  // Use non-greedy matching for URL to stop at first closing paren
+  // This ensures we don't capture trailing punctuation
+  asciidoc = asciidoc.replace(/(?<!!)\[([^\]]+)\]\(([^)]+?)\)/g, (match, text, url) => {
+    const cleanUrl = url.trim();
+    const cleanText = text.trim();
+    
+    // Check if it's already a MEDIA: placeholder (processed by processMediaUrlsInMarkdown)
+    if (cleanUrl.startsWith('MEDIA:')) {
+      return cleanUrl; // Return the placeholder as-is
+    }
+    
+    // Regular link - escape special AsciiDoc characters in both URL and text
+    const escapedUrl = cleanUrl.replace(/([\[\]])/g, '\\$1');
+    const escapedText = cleanText.replace(/([\[\]])/g, '\\$1');
+    return `link:${escapedUrl}[${escapedText}]`;
+  });
 
   // Convert horizontal rules
   asciidoc = asciidoc.replace(/^---$/gm, '\'\'\'');
@@ -320,13 +362,107 @@ function processNostrAddresses(content: string, linkBaseURL: string): string {
 }
 
 /**
+ * Processes media URLs in markdown links and images
+ * Converts them to MEDIA: placeholders before markdown conversion
+ */
+function processMediaUrlsInMarkdown(content: string): string {
+  let processed = content;
+
+  // Process YouTube URLs in markdown links: [text](youtube-url)
+  processed = processed.replace(/\[([^\]]+)\]\((?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[?&][^?\s<>"{}|\\^`\[\]()]*)?\)/gi, (_match, text, videoId) => {
+    return `MEDIA:youtube:${videoId}`;
+  });
+
+  // Process Spotify URLs in markdown links: [text](spotify-url)
+  processed = processed.replace(/\[([^\]]+)\]\((?:https?:\/\/)?(?:open\.)?spotify\.com\/(track|album|playlist|artist|episode|show)\/([a-zA-Z0-9]+)(?:[?&][^?\s<>"{}|\\^`\[\]()]*)?\)/gi, (_match, text, type, id) => {
+    return `MEDIA:spotify:${type}:${id}`;
+  });
+
+  // Process video files in markdown links/images: [text](video-url) or ![alt](video-url)
+  processed = processed.replace(/[!]?\[([^\]]*)\]\((https?:\/\/[^\s<>"{}|\\^`\[\]()]+\.(mp4|webm|ogg|m4v|mov|avi|mkv|flv|wmv))(?:\?[^\s<>"{}|\\^`\[\]()]*)?\)/gi, (_match, altOrText, url) => {
+    const cleanUrl = url.replace(/\?.*$/, ''); // Remove query params
+    return `MEDIA:video:${cleanUrl}`;
+  });
+
+  // Process audio files in markdown links/images: [text](audio-url) or ![alt](audio-url)
+  processed = processed.replace(/[!]?\[([^\]]*)\]\((https?:\/\/[^\s<>"{}|\\^`\[\]()]+\.(mp3|m4a|ogg|wav|flac|aac|opus|wma))(?:\?[^\s<>"{}|\\^`\[\]()]*)?\)/gi, (_match, altOrText, url) => {
+    const cleanUrl = url.replace(/\?.*$/, ''); // Remove query params
+    return `MEDIA:audio:${cleanUrl}`;
+  });
+
+  return processed;
+}
+
+/**
+ * Processes media URLs (YouTube, Spotify, video, audio files) in bare URLs
+ * Converts them to placeholders that will be rendered as embeds/players
+ */
+function processMediaUrls(content: string): string {
+  // Process YouTube URLs
+  // Match: youtube.com/watch?v=, youtu.be/, youtube.com/embed/, youtube.com/v/
+  content = content.replace(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[?&][^?\s<>"{}|\\^`\[\]()]*)?/gi, (match, videoId) => {
+    return `MEDIA:youtube:${videoId}`;
+  });
+
+  // Process Spotify URLs
+  // Match: open.spotify.com/track/, open.spotify.com/album/, open.spotify.com/playlist/, open.spotify.com/artist/
+  content = content.replace(/(?:https?:\/\/)?(?:open\.)?spotify\.com\/(track|album|playlist|artist|episode|show)\/([a-zA-Z0-9]+)(?:[?&][^?\s<>"{}|\\^`\[\]()]*)?/gi, (match, type, id) => {
+    return `MEDIA:spotify:${type}:${id}`;
+  });
+
+  // Process video files (mp4, webm, ogg, m4v, mov, avi, etc.)
+  content = content.replace(/(?:https?:\/\/[^\s<>"{}|\\^`\[\]()]+)\.(mp4|webm|ogg|m4v|mov|avi|mkv|flv|wmv)(?:\?[^\s<>"{}|\\^`\[\]()]*)?/gi, (match, ext) => {
+    const url = match.replace(/\?.*$/, ''); // Remove query params for cleaner URL
+    return `MEDIA:video:${url}`;
+  });
+
+  // Process audio files (mp3, m4a, ogg, wav, flac, aac, etc.)
+  content = content.replace(/(?:https?:\/\/[^\s<>"{}|\\^`\[\]()]+)\.(mp3|m4a|ogg|wav|flac|aac|opus|wma)(?:\?[^\s<>"{}|\\^`\[\]()]*)?/gi, (match, ext) => {
+    const url = match.replace(/\?.*$/, ''); // Remove query params for cleaner URL
+    return `MEDIA:audio:${url}`;
+  });
+
+  return content;
+}
+
+/**
+ * Processes bare URLs and converts them to AsciiDoc links
+ * Matches http://, https://, and www. URLs that aren't already in markdown links
+ */
+function processBareUrls(content: string): string {
+  // Match URLs that aren't already in markdown link format
+  // Pattern: http://, https://, or www. followed by valid URL characters
+  // Use negative lookbehind to avoid matching URLs inside parentheses (markdown links)
+  // Match URLs that are not preceded by ]( (which would be a markdown link)
+  const urlPattern = /(?<!\]\()\b(https?:\/\/[^\s<>"{}|\\^`\[\]()]+|www\.[^\s<>"{}|\\^`\[\]()]+)/gi;
+  
+  return content.replace(urlPattern, (match, url) => {
+    // Ensure URL starts with http:// or https://
+    let fullUrl = url;
+    if (url.startsWith('www.')) {
+      fullUrl = 'https://' + url;
+    }
+    
+    // Escape special AsciiDoc characters
+    const escapedUrl = fullUrl.replace(/([\[\]])/g, '\\$1');
+    return `link:${escapedUrl}[${url}]`;
+  });
+}
+
+/**
  * Processes hashtags
  * Converts to hashtag:tag[#tag] format
+ * Handles hashtags at the beginning of lines to prevent line breaks
  */
 function processHashtags(content: string): string {
-  // Match # followed by word characters, avoiding those in URLs, code blocks, etc.
-  return content.replace(/\B#([a-zA-Z0-9_]+)/g, (_match, hashtag) => {
+  // Match # followed by word characters
+  // Match at word boundary OR at start of line OR after whitespace
+  // This ensures we don't match # in URLs or code, but do match at line start
+  return content.replace(/(^|\s|>)#([a-zA-Z0-9_]+)(?![a-zA-Z0-9_])/g, (match, before, hashtag) => {
     const normalizedHashtag = hashtag.toLowerCase();
-    return `hashtag:${normalizedHashtag}[#${hashtag}]`;
+    // Preserve the space or line start before the hashtag to prevent line breaks
+    // Add a zero-width space or ensure proper spacing
+    const prefix = before === '' ? '' : before;
+    return `${prefix}hashtag:${normalizedHashtag}[#${hashtag}]`;
   });
 }

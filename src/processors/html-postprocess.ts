@@ -18,10 +18,8 @@ export function postProcessHtml(html: string, options: PostProcessOptions = {}):
     return `<span data-bookstr="${escaped}" class="bookstr-placeholder"></span>`;
   });
 
-  // Convert hashtag links to HTML
+  // Convert hashtag links to HTML (styled like links but not clickable)
   processed = processed.replace(/hashtag:([^[]+)\[([^\]]+)\]/g, (_match, normalizedHashtag, displayText) => {
-    // URL encode the hashtag to prevent XSS
-    const encodedHashtag = encodeURIComponent(normalizedHashtag);
     // HTML escape the display text
     const escapedDisplay = displayText
       .replace(/&/g, '&amp;')
@@ -29,7 +27,8 @@ export function postProcessHtml(html: string, options: PostProcessOptions = {}):
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-    return `<a href="/notes?t=${encodedHashtag}" class="hashtag-link text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline">${escapedDisplay}</a>`;
+    // Use span instead of <a> tag - same color as links but no underline and not clickable
+    return `<span class="hashtag-link">${escapedDisplay}</span>`;
   });
 
   // Convert WIKILINK:dtag|display placeholder format to HTML
@@ -68,6 +67,12 @@ export function postProcessHtml(html: string, options: PostProcessOptions = {}):
     }
   });
 
+  // Process media URLs (YouTube, Spotify, video, audio)
+  processed = processMedia(processed);
+
+  // Process OpenGraph links (external links that should have rich previews)
+  processed = processOpenGraphLinks(processed, options.linkBaseURL);
+
   // Process images: add max-width styling and data attributes
   processed = processImages(processed);
 
@@ -98,6 +103,180 @@ function getNostrType(id: string): 'npub' | 'nprofile' | 'nevent' | 'naddr' | 'n
   if (id.startsWith('naddr')) return 'naddr';
   if (id.startsWith('note')) return 'note';
   return null;
+}
+
+/**
+ * Process media URLs (YouTube, Spotify, video, audio)
+ * Converts MEDIA: placeholders to HTML embeds/players
+ */
+function processMedia(html: string): string {
+  let processed = html;
+
+  // Process YouTube embeds
+  processed = processed.replace(/MEDIA:youtube:([a-zA-Z0-9_-]+)/g, (_match, videoId) => {
+    const escapedId = videoId.replace(/"/g, '&quot;');
+    return `<div class="media-embed youtube-embed" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; margin: 1rem 0;">
+      <iframe 
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" 
+        src="https://www.youtube.com/embed/${escapedId}" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen
+        loading="lazy">
+      </iframe>
+    </div>`;
+  });
+
+  // Process Spotify embeds
+  processed = processed.replace(/MEDIA:spotify:(track|album|playlist|artist|episode|show):([a-zA-Z0-9]+)/g, (_match, type, id) => {
+    const escapedType = type.replace(/"/g, '&quot;');
+    const escapedId = id.replace(/"/g, '&quot;');
+    return `<div class="media-embed spotify-embed" style="margin: 1rem 0;">
+      <iframe 
+        style="border-radius: 12px; width: 100%; max-width: 100%;" 
+        src="https://open.spotify.com/embed/${escapedType}/${escapedId}?utm_source=generator" 
+        width="100%" 
+        height="352" 
+        frameborder="0" 
+        allowfullscreen="" 
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+        loading="lazy">
+      </iframe>
+    </div>`;
+  });
+
+  // Process video files
+  processed = processed.replace(/MEDIA:video:(https?:\/\/[^\s<>"{}|\\^`\[\]()]+)/g, (_match, url) => {
+    const escapedUrl = url
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    return `<div class="media-embed video-embed" style="margin: 1rem 0;">
+      <video 
+        controls 
+        preload="metadata" 
+        style="width: 100%; max-width: 100%; height: auto; border-radius: 8px;"
+        class="media-player">
+        <source src="${escapedUrl}" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </div>`;
+  });
+
+  // Process audio files
+  processed = processed.replace(/MEDIA:audio:(https?:\/\/[^\s<>"{}|\\^`\[\]()]+)/g, (_match, url) => {
+    const escapedUrl = url
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    return `<div class="media-embed audio-embed" style="margin: 1rem 0;">
+      <audio 
+        controls 
+        preload="metadata" 
+        style="width: 100%; max-width: 100%;"
+        class="media-player">
+        <source src="${escapedUrl}">
+        Your browser does not support the audio tag.
+      </audio>
+    </div>`;
+  });
+
+  return processed;
+}
+
+/**
+ * Process OpenGraph links - mark external links for OpenGraph preview fetching
+ */
+function processOpenGraphLinks(html: string, linkBaseURL?: string): string {
+  let processed = html;
+
+  // Extract base domain from linkBaseURL if provided
+  let baseDomain: string | null = null;
+  if (linkBaseURL) {
+    try {
+      const urlMatch = linkBaseURL.match(/^https?:\/\/([^\/]+)/);
+      if (urlMatch) {
+        baseDomain = urlMatch[1];
+      }
+    } catch {
+      // Ignore parsing errors
+    }
+  }
+
+  // Match external links (http/https) that aren't media, nostr, or wikilinks
+  // Skip links that are already in media embeds or special containers
+  // Use a more flexible regex that handles attributes in any order
+  processed = processed.replace(/<a\s+([^>]*?)href\s*=\s*["'](https?:\/\/[^"']+)["']([^>]*?)>(.*?)<\/a>/gis, (match, before, href, after, linkText) => {
+    // Skip if it's already a media embed, nostr link, wikilink, or opengraph link
+    if (match.includes('class="wikilink"') || 
+        match.includes('class="nostr-link"') ||
+        match.includes('class="opengraph-link"') ||
+        match.includes('data-embedded-note') ||
+        match.includes('youtube-embed') ||
+        match.includes('spotify-embed') ||
+        match.includes('media-embed') ||
+        match.includes('opengraph-link-container')) {
+      return match;
+    }
+
+    // Skip if it's a media file URL
+    if (/\.(mp4|webm|ogg|m4v|mov|avi|mkv|flv|wmv|mp3|m4a|wav|flac|aac|opus|wma|jpeg|jpg|png|gif|webp|svg)$/i.test(href)) {
+      return match;
+    }
+
+    // Skip if it's YouTube or Spotify (already handled as media)
+    if (/youtube\.com|youtu\.be|spotify\.com/i.test(href)) {
+      return match;
+    }
+
+    // Check if it's an external link (not same domain)
+    let isExternal = true;
+    if (baseDomain) {
+      try {
+        const hrefMatch = href.match(/^https?:\/\/([^\/]+)/);
+        if (hrefMatch && hrefMatch[1] === baseDomain) {
+          isExternal = false;
+        }
+      } catch {
+        // If parsing fails, assume external
+      }
+    }
+
+    // Only process external links
+    if (!isExternal) {
+      return match;
+    }
+
+    // Escape the URL for data attribute
+    const escapedUrl = href
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // Add data attribute for OpenGraph fetching and wrap in container
+    // The actual OpenGraph fetching will be done client-side via JavaScript
+    return `<span class="opengraph-link-container" data-og-url="${escapedUrl}">
+      <a href="${escapedUrl}" target="_blank" rel="noreferrer noopener" class="opengraph-link break-words inline-flex items-baseline gap-1">${linkText} <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>
+      <div class="opengraph-preview" data-og-loading="true" style="display: none;">
+        <div class="opengraph-card">
+          <div class="opengraph-image-container">
+            <img class="opengraph-image" src="" alt="" style="display: none;" />
+          </div>
+          <div class="opengraph-content">
+            <div class="opengraph-site"></div>
+            <div class="opengraph-title"></div>
+            <div class="opengraph-description"></div>
+          </div>
+        </div>
+      </div>
+    </span>`;
+  });
+
+  return processed;
 }
 
 /**
