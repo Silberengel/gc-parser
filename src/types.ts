@@ -16,14 +16,14 @@ export interface ParserOptions {
   enableMusicalNotation?: boolean;
   /** Enable nostr: address processing (default: true) */
   enableNostrAddresses?: boolean;
-  /** 
+  /**
    * Custom URL format for wikilinks. Can be:
    * - A string template with {dtag} placeholder: "/d/{dtag}" or "/events?d={dtag}"
    * - A function that takes dtag and returns URL: (dtag: string) => `/d/${dtag}`
    * Default: "/events?d={dtag}"
    */
   wikilinkUrl?: string | ((dtag: string) => string);
-  /** 
+  /**
    * Custom URL format for hashtags. Can be:
    * - A string template with {topic} placeholder: "/notes?t={topic}" or "/hashtag/{topic}"
    * - A function that takes topic (hashtag without #) and returns URL: (topic: string) => `/notes?t=${topic}`
@@ -72,7 +72,11 @@ export interface ProcessResult {
   /** Extracted hashtags */
   hashtags: string[];
   /** Extracted regular links */
-  links: Array<{ url: string; text: string; isExternal: boolean }>;
+  links: Array<{
+    url: string;
+    text: string;
+    isExternal: boolean;
+  }>;
   /** Extracted media URLs */
   media: string[];
 }
@@ -81,9 +85,8 @@ export interface ProcessResult {
  * Detected content format
  */
 export enum ContentFormat {
-  Unknown = 'unknown',
-  AsciiDoc = 'asciidoc',
-  Markdown = 'markdown',
-  Wikipedia = 'wikipedia',
-  Plain = 'plain'
+  Unknown = "unknown",
+  AsciiDoc = "asciidoc",
+  Markdown = "markdown",
+  Plain = "plain"
 }

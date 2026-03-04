@@ -1,193 +1,56 @@
-import { ProcessResult } from '../types';
-import { extractTOC, sanitizeHTML, processLinks } from './html-utils';
-import { postProcessHtml } from './html-postprocess';
+import asciidoctor from '@asciidoctor/core';
+import { ParserOptions } from '../types';
+import * as emoji from 'node-emoji';
 
-// Lazy-load AsciiDoctor instance to avoid issues with Jest module transformation
-// Use require() for CommonJS modules to avoid Jest transformation issues
-let asciidoctorInstance: any = null;
-
-function getAsciidoctorInstance() {
-  if (!asciidoctorInstance) {
-    // Use require() instead of import() to avoid Jest transformation issues with Opal runtime
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asciidoctor = require('@asciidoctor/core');
-    asciidoctorInstance = asciidoctor.default();
-  }
-  return asciidoctorInstance;
-}
-
-export interface ProcessOptions {
-  enableCodeHighlighting?: boolean;
-  enableLaTeX?: boolean;
-  enableMusicalNotation?: boolean;
-  originalContent?: string; // Original content for LaTeX detection
-  linkBaseURL?: string; // Base URL for link processing
-  wikilinkUrl?: string | ((dtag: string) => string); // Custom URL format for wikilinks
-  hashtagUrl?: string | ((topic: string) => string); // Custom URL format for hashtags
+export interface AsciiDocResult {
+  html: string;
+  tableOfContents: string;
+  hasLaTeX: boolean;
+  hasMusicalNotation: boolean;
 }
 
 /**
- * Processes AsciiDoc content to HTML using AsciiDoctor
- * Uses AsciiDoctor's built-in highlight.js and LaTeX support
+ * Process AsciiDoc content to HTML
  */
-export async function processAsciidoc(
-  content: string,
-  options: ProcessOptions = {}
-): Promise<ProcessResult> {
-  const {
-    enableCodeHighlighting = true,
-    enableLaTeX = true,
-    enableMusicalNotation = true,
-  } = options;
-
-  // Check if content starts with level 3+ headers
-  // Asciidoctor article doctype requires level 1 (=) or level 2 (==) before level 3 (===)
-  // If content starts with level 3+, use book doctype
-  const firstHeaderMatch = content.match(/^(={1,6})\s+/m);
-  let doctype: 'article' | 'book' = 'article';
+export function processAsciiDoc(content: string, options: ParserOptions): AsciiDocResult {
+  const hasLaTeX = /\[source,latex\]|`\$\[|`\$\\|`\$\$|`\$\{|\$\$|\$\{|\$[^$]/.test(content);
+  const hasMusicalNotation = /\[abc\]|\[source,abc\]/i.test(content);
   
-  if (firstHeaderMatch) {
-    const firstHeaderLevel = firstHeaderMatch[1].length;
-    if (firstHeaderLevel >= 3) {
-      doctype = 'book';
+  // Process emojis before AsciiDoc conversion
+  const processedContent = emoji.emojify(content);
+
+  const asciidoctorOptions: any = {
+    safe: 'unsafe',
+    attributes: {
+      'showtitle': true,
+      'icons': 'font',
+      'source-highlighter': options.enableCodeHighlighting !== false ? 'highlight.js' : undefined,
+      'highlightjs-theme': 'github',
+      'toc': 'left',
+      'toclevels': 6,
+      'sectanchors': true,
+      'sectlinks': true,
+      'idprefix': '_',
+      'idseparator': '_'
     }
-  }
+  };
 
-  try {
-    const instance = getAsciidoctorInstance();
-    const result = instance.convert(content, {
-      safe: 'safe',
-      backend: 'html5',
-      doctype: doctype,
-      attributes: {
-        'showtitle': true,
-        'sectanchors': true,
-        'sectlinks': true,
-        'toc': 'left',
-        'toclevels': 6,
-        'toc-title': 'Table of Contents',
-        'source-highlighter': enableCodeHighlighting ? 'highlight.js' : 'none',
-        'stem': enableLaTeX ? 'latexmath' : 'none',
-        'plantuml': 'plantuml', // Enable PlantUML diagram support
-        'data-uri': true,
-        'imagesdir': '',
-        'linkcss': false,
-        'stylesheet': '',
-        'stylesdir': '',
-        'prewrap': true,
-        'sectnums': false,
-        'sectnumlevels': 6,
-        'experimental': true,
-        'compat-mode': false,
-        'attribute-missing': 'warn',
-        'attribute-undefined': 'warn',
-        'skip-front-matter': true,
-        'source-indent': 0,
-        'indent': 0,
-        'tabsize': 2,
-        'tabwidth': 2,
-        'hardbreaks': false,
-        'paragraph-rewrite': 'normal',
-        'sectids': true,
-        'idprefix': '',
-        'idseparator': '-',
-        'sectidprefix': '',
-        'sectidseparator': '-'
-      }
-    });
+  // Convert to HTML
+  const Asciidoctor = asciidoctor();
+  const htmlResult = Asciidoctor.convert(processedContent, asciidoctorOptions);
+  const html = typeof htmlResult === 'string' ? htmlResult : htmlResult.toString();
 
-    const htmlString = typeof result === 'string' ? result : result.toString();
-    
-    // Extract table of contents from HTML
-    const { toc, contentWithoutTOC } = extractTOC(htmlString);
-    
-    // Sanitize HTML to prevent XSS
-    const sanitized = sanitizeHTML(contentWithoutTOC);
-    
-    // Post-process HTML: convert macros to HTML, add styling, etc.
-    const processed = postProcessHtml(sanitized, {
-      enableMusicalNotation,
-      linkBaseURL: options.linkBaseURL,
-      wikilinkUrl: options.wikilinkUrl,
-      hashtagUrl: options.hashtagUrl,
-    });
-    
-    // Process links: add target="_blank" to external links
-    const processedWithLinks = options.linkBaseURL 
-      ? processLinks(processed, options.linkBaseURL)
-      : processed;
-    
-    // Also process TOC
-    const tocSanitized = sanitizeHTML(toc);
-    const tocProcessed = postProcessHtml(tocSanitized, {
-      enableMusicalNotation: false, // Don't process music in TOC
-      linkBaseURL: options.linkBaseURL,
-      wikilinkUrl: options.wikilinkUrl,
-      hashtagUrl: options.hashtagUrl,
-    });
-    
-    // Process links in TOC as well
-    const tocProcessedWithLinks = options.linkBaseURL
-      ? processLinks(tocProcessed, options.linkBaseURL)
-      : tocProcessed;
+  // Extract table of contents if present
+  const tocMatch = html.match(/<div id="toc"[^>]*>([\s\S]*?)<\/div>/);
+  const tableOfContents = tocMatch ? tocMatch[1] : '';
 
-    // Check for LaTeX in original content (more reliable than checking HTML)
-    const contentToCheck = options.originalContent || content;
-    const hasLaTeX = enableLaTeX && hasMathContent(contentToCheck);
-    
-    // Check for musical notation in processed HTML
-    const hasMusicalNotation = enableMusicalNotation && (
-      /class="abc-notation"|class="lilypond-notation"|class="chord"|class="musicxml-notation"/.test(processed)
-    );
+  // Remove TOC from main content if present
+  const contentWithoutToc = html.replace(/<div id="toc"[^>]*>[\s\S]*?<\/div>/, '');
 
-    return {
-      content: processedWithLinks,
-      tableOfContents: tocProcessedWithLinks,
-      hasLaTeX,
-      hasMusicalNotation,
-      nostrLinks: [], // Will be populated by metadata extraction
-      wikilinks: [],
-      hashtags: [],
-      links: [],
-      media: [],
-    };
-  } catch (error) {
-    // Fallback to plain text with error logging
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    // Use process.stderr.write for Node.js compatibility instead of console.error
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodeProcess = (globalThis as any).process;
-    if (nodeProcess?.stderr) {
-      nodeProcess.stderr.write(`Error processing AsciiDoc: ${errorMessage}\n`);
-    }
-    
-    // Escape HTML in content for safe display
-    const escapedContent = sanitizeHTML(content);
-    
-    return {
-      content: `<p>${escapedContent}</p>`,
-      tableOfContents: '',
-      hasLaTeX: false,
-      hasMusicalNotation: false,
-      nostrLinks: [],
-      wikilinks: [],
-      hashtags: [],
-      links: [],
-      media: [],
-    };
-  }
-}
-
-/**
- * Check if content has LaTeX math
- * Based on jumble's detection pattern
- */
-function hasMathContent(content: string): boolean {
-  // Check for inline math: $...$ or \(...\)
-  const inlineMath = /\$[^$]+\$|\\\([^)]+\\\)/.test(content);
-  
-  // Check for block math: $$...$$ or \[...\]
-  const blockMath = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/.test(content);
-  
-  return inlineMath || blockMath;
+  return {
+    html: contentWithoutToc,
+    tableOfContents,
+    hasLaTeX,
+    hasMusicalNotation
+  };
 }

@@ -7,6 +7,8 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
+    "test:asciidoc": "ts-node src/__tests__/asciidoc.test.ts",
+    "test:all": "npm run test && npm run test:asciidoc",
     "test:report": "ts-node generate-test-report.ts",
     "prepublishOnly": "npm run build"
   },
@@ -23,6 +25,8 @@
   "license": "MIT",
   "dependencies": {
     "@asciidoctor/core": "^3.0.4",
+    "@types/marked": "^5.0.2",
+    "marked": "^17.0.3",
     "node-emoji": "^2.2.0"
   },
   "devDependencies": {

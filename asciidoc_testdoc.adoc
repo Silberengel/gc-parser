@@ -112,41 +112,49 @@ link:https://www.welt.de/politik/ausland/article69a7ca00ad41f3cd65a1bc63/iran-dr
 
 this should render as plaintext: `http://www.example.com`
 
-this should be a hyperlink: www.example.com
-
-this should be a hyperlink to the http URL with the same address, so wss://theforest.nostr1.com should render like link:wss://theforest.nostr1.com[https://theforest.nostr1.com]
+this should be a hyperlink to the http URL with the same address link:https://theforest.nostr1.com[wss://theforest.nostr1.com]
 
 === Images
 
 https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png
 
-image::https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png[test image, width=100%]
+image::https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png[width=400]
 
 === Media
 
 ==== YouTube
 
-https://youtube.com/shorts/ZWfvChb-i0w
+Normal
 
-link:https://youtube.com/shorts/ZWfvChb-i0w[image:https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png[Youtube link with pic]]
+https://www.youtube.com/watch?v=KGIAS0cslSU
+
+https://youtu.be/KGIAS0cslSU
+
+video::KGIAS0cslSU[youtube]
+
+Shorts
+
+https://www.youtube.com/shorts/s-BQhXdCs8Y
+
+video::s-BQhXdCs8Y[youtube]
 
 ==== Spotify
 
-https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ
+https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx
 
-link:https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ[image:https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png[Spotify link with pic]]
+link:https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx[]
 
 ==== Audio
 
 https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3
 
-link:https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3[image:https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png[Audio link with pic]]
+audio::https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3[]
 
 ==== Video
 
 https://v.nostr.build/MTjaYib4upQuf8zn.mp4
 
-link:https://v.nostr.build/MTjaYib4upQuf8zn.mp4[image:https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png[Video link with pic]]
+video::https://v.nostr.build/MTjaYib4upQuf8zn.mp4[]
 
 == Tables
 
@@ -155,8 +163,12 @@ link:https://v.nostr.build/MTjaYib4upQuf8zn.mp4[image:https://upload.wikimedia.o
 [cols="1,2"]
 |===
 |Syntax|Description
-|Header|Title
-|Paragraph|Text
+
+|Header
+|Title
+
+|Paragraph
+|Text
 |===
 
 === Unorderly
@@ -164,8 +176,12 @@ link:https://v.nostr.build/MTjaYib4upQuf8zn.mp4[image:https://upload.wikimedia.o
 [cols="1,2"]
 |===
 |Syntax|Description
-|Header|Title
-|Paragraph|Text
+
+|Header
+|Title
+
+|Paragraph
+|Text
 |===
 
 === With alignment
@@ -173,8 +189,14 @@ link:https://v.nostr.build/MTjaYib4upQuf8zn.mp4[image:https://upload.wikimedia.o
 [cols="<,^,>"]
 |===
 |Syntax|Description|Test Text
-|Header|Title|Here's this
-|Paragraph|Text|And more
+
+|Header
+|Title
+|Here's this
+
+|Paragraph
+|Text
+|And more
 |===
 
 == Code blocks
@@ -251,7 +273,7 @@ $$
 
 === ABC Notation
 
-[source,abc]
+[abc]
 ----
 X:1
 T:Ohne Titel
@@ -270,7 +292,7 @@ dd d2 | ee e2 | fg ad | ed/c/ d2 :|
 
 === PlantUML
 
-[source,plantuml]
+[plantuml]
 ----
 @startuml
 Alice -> Bob: Authentication Request
@@ -280,7 +302,7 @@ Bob --> Alice: Authentication Response
 
 === BPMN
 
-[source,plantuml]
+[plantuml]
 ----
 @startbpmn
 start
@@ -306,7 +328,7 @@ Here's a simple footnote,footnote:[This is the first footnote.] and here's a lon
 
 == Anchor links
 
-<<bullet-list,Link to bullet list section>>
+<<_bullet_list,Link to bullet list section>>
 
 == Formatting
 

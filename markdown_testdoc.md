@@ -16,6 +16,7 @@ array:
 ## Bullet list
 
 This is a test unordered list with mixed bullets:
+
 * First item with a number 2. in it
 * Second item
 * Third item
@@ -24,6 +25,7 @@ This is a test unordered list with mixed bullets:
 * Fourth item 
 
 Another unordered list:
+
 - 1st item
 - 2nd item
 - third item containing _italic_ text
@@ -32,6 +34,7 @@ Another unordered list:
 - fourth item
 
 This is a test ordered list with indented items:
+
 1. First item
 2. Second item
 3. Third item
@@ -39,19 +42,15 @@ This is a test ordered list with indented items:
     2. Indented item
 4. Fourth item
 
-Ordered list where everything has the same number:
-1. First item
-1. Second item
-1. Third item
-1. Fourth item 
-
 Ordered list that is wrongly numbered:
+
 1. First item
 8. Second item
 3. Third item
 5. Fourth item
 
 This is a mixed list with indented items:
+
 1. First item
 2. Second item
 3. Third item
@@ -60,13 +59,13 @@ This is a mixed list with indented items:
 4. Fourth item
 
 This is another mixed list with indented items:
+
 - First item
 - Second item
 - Third item
     1. Indented item
     2. Indented item
 - Fourth item
-
 
 ## Headers
 
@@ -116,13 +115,11 @@ https://www.welt.de/politik/ausland/article69a7ca00ad41f3cd65a1bc63/iran-drohte-
 
 this should render as plaintext: `http://www.example.com`
 
-this should be a hyperlink: www.example.com
-
-this shouild be a hyperlink to the http URL with the same address, so wss://theforest.nostr1.com should render like [wss://theforest.nostr1.com](https://theforest.nostr1.com)
+this shouild be a hyperlink to the http URL with the same address [wss://theforest.nostr1.com](https://theforest.nostr1.com)
 
 ### Images
 
-Image: https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png
+https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png
 
 ![test image](https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png)
 
@@ -132,25 +129,25 @@ Image: https://blog.ronin.cloud/content/images/size/w2000/2022/02/markdown.png
 
 https://youtube.com/shorts/ZWfvChb-i0w
 
-[![Youtube link with pic](https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png)](https://youtube.com/shorts/ZWfvChb-i0w)
+![Youtube link](https://youtube.com/shorts/ZWfvChb-i0w)
 
 #### Spotify
 
 https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ
 
-[![Spotify link with pic](https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png)](https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ)
+![Spotify link](https://open.spotify.com/episode/1GSZFA8vWltPyxYkArdRKx?si=bq6-az28TcuP596feTkRFQ)
 
 #### Audio
 
 https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3
 
-[![Audio link with pic](https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png)](https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3)
+![Audio link](https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_rick_beato.mp3)
 
 #### Video
 
 https://v.nostr.build/MTjaYib4upQuf8zn.mp4
 
-[![Video link with pic](https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/YouTube_social_white_square_%282024%29.svg/960px-YouTube_social_white_square_%282024%29.svg.png)](https://v.nostr.build/MTjaYib4upQuf8zn.mp4)
+![Video link](https://v.nostr.build/MTjaYib4upQuf8zn.mp4)
 
 ## Tables
 
@@ -232,34 +229,6 @@ M =
 $$
 ```
 
-```latex
-$$
-f(x)=
-\begin{cases}
-1/d_{ij} & \quad \text{when $d_{ij} \leq 160$}\\ 
-0 & \quad \text{otherwise}
-\end{cases}
-$$
-```
-
-### ABC Notation
-
-```abc
-X:1
-T:Ohne Titel
-C:Aufgezeichnet 1784
-A:Seibis nahe Lichtenberg in Oberfranken
-S:Handschrift, bezeichnet und datiert: "Heinrich Nicol Philipp zu Seibis den 30 Junius 1784"
-M:4/4
-L:1/4
-K:D
-dd d2 | ee e2 | fg ad | cB cA |\
-dd d2 | ee e2 | fg ad | ed/c/ d2 :|
-|:\
-fg ad | cB cA | fg ad | cB cA |\
-dd d2 | ee e2 | fg ad | ed/c/ d2 :|
-```
-
 ## LateX
 
 ### LaTex in inline-code
@@ -280,7 +249,7 @@ Here's a simple footnote,[^1] and here's a longer one.[^bignote]
 
 ## Anchor links
 
-[Link to bullet list section](#bullet-lists)
+[Link to bullet list section](#bullet-list)
 
 ## Formatting
 
@@ -290,11 +259,7 @@ Here's a simple footnote,[^1] and here's a longer one.[^bignote]
 
 ### Bold
 
-This is *bold* text. So is this **bold** text.
-
-### Italic
-
-This is _italic_ text. So is this __italic__ text.
+This is *italic* text. So is this **bold** text.
 
 ### Task List
 

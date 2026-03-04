@@ -1,98 +1,127 @@
-import { ParserOptions, ProcessResult, ContentFormat } from './types';
+import { ParserOptions, ProcessResult, ContentFormat, Wikilink } from './types';
 import { detectFormat } from './detector';
-import { convertToAsciidoc } from './converters/to-asciidoc';
-import { processAsciidoc } from './processors/asciidoc';
-import { extractMetadata } from './extractors/metadata';
-import { extractFrontmatter } from './extractors/frontmatter';
+import { processAsciiDoc } from './processors/asciidoc';
+import { processMarkdown } from './processors/markdown';
+import { postProcess } from './post-processor';
+import { preProcessAsciiDoc, restorePlaceholders } from './pre-processor';
 
 /**
  * Default parser options
  */
 export function defaultOptions(): ParserOptions {
   return {
-    linkBaseURL: '',
+    linkBaseURL: undefined,
     enableAsciiDoc: true,
     enableMarkdown: true,
     enableCodeHighlighting: true,
     enableLaTeX: true,
     enableMusicalNotation: true,
     enableNostrAddresses: true,
+    wikilinkUrl: undefined,
+    hashtagUrl: undefined
   };
 }
 
 /**
  * Main parser for Nostr event content
- * Handles multiple content formats: AsciiDoc, Markdown, code syntax,
- * LaTeX, musical notation, and nostr: prefixed addresses
- * 
- * Everything is converted to AsciiDoc first, then processed through AsciiDoctor
+ * Handles multiple content formats: AsciiDoc, Markdown
+ * Post-processes wikilinks, hashtags, and nostr: addresses
  */
 export class Parser {
-  private options: Required<Omit<ParserOptions, 'wikilinkUrl' | 'hashtagUrl'>> & Pick<ParserOptions, 'wikilinkUrl' | 'hashtagUrl'>;
+  private options: ParserOptions;
 
-  constructor(options: ParserOptions = {}) {
-    const defaults = defaultOptions();
-    this.options = {
-      linkBaseURL: options.linkBaseURL ?? defaults.linkBaseURL ?? '',
-      enableAsciiDoc: options.enableAsciiDoc ?? defaults.enableAsciiDoc ?? true,
-      enableMarkdown: options.enableMarkdown ?? defaults.enableMarkdown ?? true,
-      enableCodeHighlighting: options.enableCodeHighlighting ?? defaults.enableCodeHighlighting ?? true,
-      enableLaTeX: options.enableLaTeX ?? defaults.enableLaTeX ?? true,
-      enableMusicalNotation: options.enableMusicalNotation ?? defaults.enableMusicalNotation ?? true,
-      enableNostrAddresses: options.enableNostrAddresses ?? defaults.enableNostrAddresses ?? true,
-      wikilinkUrl: options.wikilinkUrl ?? defaults.wikilinkUrl,
-      hashtagUrl: options.hashtagUrl ?? defaults.hashtagUrl,
-    };
+  constructor(options?: ParserOptions) {
+    this.options = { ...defaultOptions(), ...options };
   }
 
   /**
    * Process Nostr event content and return HTML
    * Automatically detects the content format and processes accordingly
-   * Everything is converted to AsciiDoc first, then processed through AsciiDoctor
    */
   async process(content: string): Promise<ProcessResult> {
-    // Extract frontmatter first (before any other processing)
-    const { frontmatter, content: contentWithoutFrontmatter } = extractFrontmatter(content);
+    if (!content || content.trim().length === 0) {
+      return this.emptyResult();
+    }
+
+    // Detect format
+    const format = detectFormat(content);
+
+    // Process based on format
+    let html: string;
+    let tableOfContents = '';
+    let hasLaTeX = false;
+    let hasMusicalNotation = false;
+    let frontmatter: Record<string, any> | undefined;
+
+    let preProcessWikilinks: Wikilink[] = [];
+    let preProcessHashtags: string[] = [];
     
-    // Extract metadata from content (after removing frontmatter)
-    const metadata = extractMetadata(contentWithoutFrontmatter, this.options.linkBaseURL);
+    if (format === ContentFormat.AsciiDoc && this.options.enableAsciiDoc !== false) {
+      // Pre-process to handle wikilinks and hashtags before AsciiDoc conversion
+      const preProcessResult = preProcessAsciiDoc(content, this.options);
+      preProcessWikilinks = preProcessResult.wikilinks;
+      preProcessHashtags = preProcessResult.hashtags;
+      
+      const result = processAsciiDoc(preProcessResult.content, this.options);
+      
+      // Restore wikilinks and hashtags from placeholders
+      html = restorePlaceholders(result.html, preProcessResult.wikilinks, preProcessResult.hashtags, this.options);
+      
+      tableOfContents = result.tableOfContents;
+      hasLaTeX = result.hasLaTeX;
+      hasMusicalNotation = result.hasMusicalNotation;
+    } else if (format === ContentFormat.Markdown && this.options.enableMarkdown !== false) {
+      const result = processMarkdown(content, this.options);
+      html = result.html;
+      frontmatter = result.frontmatter;
+      hasLaTeX = result.hasLaTeX;
+      hasMusicalNotation = result.hasMusicalNotation;
+    } else {
+      // Plain text or unknown format - just escape and wrap
+      html = `<p>${escapeHtml(content)}</p>`;
+    }
 
-    // Detect content format (on content without frontmatter)
-    const format = detectFormat(contentWithoutFrontmatter);
+    // Post-process for nostr: addresses and handle any remaining processing
+    // Note: wikilinks and hashtags are already processed for AsciiDoc
+    const postProcessResult = postProcess(html, this.options, format === ContentFormat.AsciiDoc);
 
-    // Convert everything to AsciiDoc format first
-    const asciidocContent = convertToAsciidoc(
-      contentWithoutFrontmatter,
-      format,
-      this.options.linkBaseURL,
-      {
-        enableNostrAddresses: this.options.enableNostrAddresses,
-      }
-    );
+    // Extract additional metadata
+    const links = extractLinks(postProcessResult.html);
+    const media = extractMedia(postProcessResult.html);
 
-    // Process through AsciiDoctor
-    const result = await processAsciidoc(
-      asciidocContent,
-      {
-        enableCodeHighlighting: this.options.enableCodeHighlighting,
-        enableLaTeX: this.options.enableLaTeX,
-        enableMusicalNotation: this.options.enableMusicalNotation,
-        originalContent: contentWithoutFrontmatter, // Pass original for LaTeX detection
-        linkBaseURL: this.options.linkBaseURL, // Pass linkBaseURL for link processing
-        wikilinkUrl: this.options.wikilinkUrl, // Pass wikilink URL format
-        hashtagUrl: this.options.hashtagUrl, // Pass hashtag URL format
-      }
-    );
+    // Merge pre-processed and post-processed wikilinks/hashtags
+    const allWikilinks = preProcessWikilinks.length > 0 
+      ? preProcessWikilinks 
+      : postProcessResult.wikilinks;
+    const allHashtags = preProcessHashtags.length > 0
+      ? preProcessHashtags
+      : postProcessResult.hashtags;
 
-    // Combine with extracted metadata and frontmatter
     return {
-      ...result,
+      content: postProcessResult.html,
+      tableOfContents,
+      hasLaTeX,
+      hasMusicalNotation,
       frontmatter,
-      nostrLinks: metadata.nostrLinks,
-      wikilinks: metadata.wikilinks,
-      hashtags: metadata.hashtags,
-      links: metadata.links,
-      media: metadata.media,
+      nostrLinks: postProcessResult.nostrLinks,
+      wikilinks: allWikilinks,
+      hashtags: allHashtags,
+      links,
+      media
+    };
+  }
+
+  private emptyResult(): ProcessResult {
+    return {
+      content: '',
+      tableOfContents: '',
+      hasLaTeX: false,
+      hasMusicalNotation: false,
+      nostrLinks: [],
+      wikilinks: [],
+      hashtags: [],
+      links: [],
+      media: []
     };
   }
 }
@@ -103,4 +132,76 @@ export class Parser {
 export async function process(content: string, options?: ParserOptions): Promise<ProcessResult> {
   const parser = new Parser(options);
   return parser.process(content);
+}
+
+/**
+ * Extract regular links from HTML
+ */
+function extractLinks(html: string): Array<{ url: string; text: string; isExternal: boolean }> {
+  const links: Array<{ url: string; text: string; isExternal: boolean }> = [];
+  const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi;
+  
+  let match;
+  while ((match = linkRegex.exec(html)) !== null) {
+    const url = match[1];
+    const text = match[2] || url;
+    const isExternal = url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//');
+    
+    // Skip nostr links, wikilinks, and hashtags (already extracted)
+    if (url.includes('nostr-') || url.includes('events?d=') || url.includes('data-topic')) {
+      continue;
+    }
+    
+    links.push({ url, text, isExternal });
+  }
+  
+  return links;
+}
+
+/**
+ * Extract media URLs from HTML
+ */
+function extractMedia(html: string): string[] {
+  const media: string[] = [];
+  
+  // Extract image sources
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = imgRegex.exec(html)) !== null) {
+    media.push(match[1]);
+  }
+  
+  // Extract video sources
+  const videoRegex = /<video[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = videoRegex.exec(html)) !== null) {
+    media.push(match[1]);
+  }
+  
+  // Extract audio sources
+  const audioRegex = /<audio[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = audioRegex.exec(html)) !== null) {
+    media.push(match[1]);
+  }
+  
+  // Extract source tags
+  const sourceRegex = /<source[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = sourceRegex.exec(html)) !== null) {
+    media.push(match[1]);
+  }
+  
+  return media;
+}
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
